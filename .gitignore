@@ -4,6 +4,7 @@
 *.ko.cmd
 *.o.cmd
 *.ko
+*.ko.btf
 *.mod
 *.mod.c
 *.mod.o
