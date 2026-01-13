@@ -2,6 +2,7 @@
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/printk.h>
+#include <linux/mnt_idmapping.h>
 
 #define MODULE_NAME "srsfs"
 
@@ -33,8 +34,8 @@ static struct inode* srsfs_get_inode(
 }
 
 static int srsfs_fill_super(struct super_block* sb, void* data, int silent) {
-  // WARN: idmap probably shouldnt be NULL
-  struct inode* inode = srsfs_get_inode(NULL, sb, NULL, S_IFDIR, SRSFS_ROOT_ID);
+  struct mnt_idmap* idmap = &nop_mnt_idmap;
+  struct inode* inode = srsfs_get_inode(idmap, sb, NULL, S_IFDIR, SRSFS_ROOT_ID);
 
   sb->s_root = d_make_root(inode);
   if (sb->s_root == NULL) {
