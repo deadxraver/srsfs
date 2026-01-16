@@ -1,8 +1,8 @@
 #include <linux/fs.h>
 #include <linux/init.h>
+#include <linux/mnt_idmapping.h>
 #include <linux/module.h>
 #include <linux/printk.h>
-#include <linux/mnt_idmapping.h>
 
 #define MODULE_NAME "srsfs"
 
@@ -15,6 +15,53 @@ MODULE_DESCRIPTION("A simple FS kernel module");
 #define SRSFS_ROOT_ID 1000
 
 static struct file_system_type srsfs_fs_type;
+
+static int srsfs_iterate(struct file* filp, struct dir_context* ctx) {
+  struct dentry* dentry = filp->f_path.dentry;
+  struct inode* inode = d_inode(dentry);
+  struct inode* parent_inode;
+  ino_t ino = inode->i_ino;
+  ino_t parent_ino;
+
+  if (ctx->pos == 0) {
+    if (!dir_emit(ctx, ".", 1, ino, DT_DIR))
+      return 0;
+    ctx->pos++;
+  }
+
+  if (ctx->pos == 1) {
+    parent_inode = d_inode(dentry->d_parent);
+    parent_ino = parent_inode->i_ino;
+    if (!dir_emit(ctx, "..", 2, parent_ino, DT_DIR))
+      return 0;
+    ctx->pos++;
+  }
+
+  if (ino == SRSFS_ROOT_ID) {
+    if (ctx->pos == 2) {
+      if (!dir_emit(ctx, "test.txt", 8, 1001, DT_REG))
+        return 0;
+      ctx->pos++;
+    }
+  }
+
+  return 0;
+}
+
+struct file_operations srsfs_dir_ops = {
+    .iterate_shared = srsfs_iterate,
+};
+
+static struct dentry* srsfs_lookup(
+    struct inode* parent_inode, struct dentry* child_dentry, unsigned int flag
+) {
+  LOG("srsfs lookup: does nothing yet...\n");
+  return NULL;
+}
+
+struct inode_operations srsfs_inode_ops = {
+    .lookup = srsfs_lookup,
+};
 
 static struct inode* srsfs_get_inode(
     struct mnt_idmap* idmap,
@@ -29,6 +76,8 @@ static struct inode* srsfs_get_inode(
   else {
     inode_init_owner(idmap, inode, dir, mode);
     inode->i_ino = i_ino;
+    inode->i_op = &srsfs_inode_ops;
+    inode->i_fop = &srsfs_dir_ops;
   }
   return inode;
 }
