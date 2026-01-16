@@ -39,7 +39,15 @@ static int srsfs_iterate(struct file* filp, struct dir_context* ctx) {
 
   if (ino == SRSFS_ROOT_ID) {
     if (ctx->pos == 2) {
-      if (!dir_emit(ctx, "test.txt", 8, 1001, DT_REG))
+      if (!dir_emit(ctx, "test.txt", 8, SRSFS_ROOT_ID + 1, DT_REG))
+        return 0;
+      ctx->pos++;
+    }
+  }
+
+  if (ino == SRSFS_ROOT_ID) {
+    if (ctx->pos == 3) {
+      if (!dir_emit(ctx, "dir", 3, SRSFS_ROOT_ID + 2, DT_DIR))
         return 0;
       ctx->pos++;
     }
@@ -52,10 +60,22 @@ struct file_operations srsfs_dir_ops = {
     .iterate_shared = srsfs_iterate,
 };
 
+static struct inode* srsfs_get_inode(
+    struct mnt_idmap*, struct super_block*, const struct inode*, umode_t, int
+);
+
 static struct dentry* srsfs_lookup(
     struct inode* parent_inode, struct dentry* child_dentry, unsigned int flag
 ) {
-  LOG("srsfs lookup: does nothing yet...\n");
+  ino_t root = parent_inode->i_ino;
+  const char* name = child_dentry->d_name.name;
+  if (root == SRSFS_ROOT_ID && !strcmp(name, "test.txt")) {
+    struct inode* inode = srsfs_get_inode(&nop_mnt_idmap, parent_inode->i_sb, NULL, S_IFREG, SRSFS_ROOT_ID + 1);
+    d_add(child_dentry, inode);
+  } else if (root == SRSFS_ROOT_ID && !strcmp(name, "dir")) {
+    struct inode* inode = srsfs_get_inode(&nop_mnt_idmap, parent_inode->i_sb, NULL, S_IFDIR, SRSFS_ROOT_ID + 2);
+    d_add(child_dentry, inode);
+  }
   return NULL;
 }
 
