@@ -1,20 +1,14 @@
-#include <linux/fs.h>
-#include <linux/init.h>
-#include <linux/mnt_idmapping.h>
-#include <linux/module.h>
-#include <linux/printk.h>
-
-#define MODULE_NAME "srsfs"
+#include "srsfs.h"
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("deadxraver");
 MODULE_DESCRIPTION("A simple FS kernel module");
 
-#define LOG(fmt, ...) pr_info("[" MODULE_NAME "]: " fmt, ##__VA_ARGS__)
-
-#define SRSFS_ROOT_ID 1000
-
 static struct file_system_type srsfs_fs_type;
+
+static struct srsfs_dir* rootdir;
+static struct srsfs_dir dirs[100];
+static int fcnt = 0;
 
 static int srsfs_iterate(struct file* filp, struct dir_context* ctx) {
   struct dentry* dentry = filp->f_path.dentry;
@@ -38,16 +32,16 @@ static int srsfs_iterate(struct file* filp, struct dir_context* ctx) {
   }
 
   if (ino == SRSFS_ROOT_ID) {
-    if (ctx->pos == 2) {
-      if (!dir_emit(ctx, "test.txt", 8, SRSFS_ROOT_ID + 1, DT_REG))
-        return 0;
-      ctx->pos++;
-    }
-  }
-
-  if (ino == SRSFS_ROOT_ID) {
-    if (ctx->pos == 3) {
-      if (!dir_emit(ctx, "dir", 3, SRSFS_ROOT_ID + 2, DT_DIR))
+    for (int i = ctx->pos - 2; i < SRSFS_DIR_CAP; ++i) { // there might be a problem with this solution, need to be tested
+      if (rootdir->content[i].state == UNUSED)
+        continue;
+      if (!dir_emit(
+              ctx,
+              rootdir->content[i].name,
+              strlen(rootdir->content[i].name),
+              rootdir->content[i].id,
+              (rootdir->content[i].is_dir ? DT_DIR : DT_REG)
+          ))
         return 0;
       ctx->pos++;
     }
@@ -60,28 +54,59 @@ struct file_operations srsfs_dir_ops = {
     .iterate_shared = srsfs_iterate,
 };
 
-static struct inode* srsfs_get_inode(
-    struct mnt_idmap*, struct super_block*, const struct inode*, umode_t, int
-);
-
 static struct dentry* srsfs_lookup(
     struct inode* parent_inode, struct dentry* child_dentry, unsigned int flag
 ) {
+  return NULL;  // TODO: remove, is set to test srsfs_iterate
   ino_t root = parent_inode->i_ino;
   const char* name = child_dentry->d_name.name;
   if (root == SRSFS_ROOT_ID && !strcmp(name, "test.txt")) {
-    struct inode* inode = srsfs_get_inode(&nop_mnt_idmap, parent_inode->i_sb, NULL, S_IFREG, SRSFS_ROOT_ID + 1);
+    struct inode* inode =
+        srsfs_get_inode(&nop_mnt_idmap, parent_inode->i_sb, NULL, S_IFREG, SRSFS_ROOT_ID + 1);
     d_add(child_dentry, inode);
   } else if (root == SRSFS_ROOT_ID && !strcmp(name, "dir")) {
-    struct inode* inode = srsfs_get_inode(&nop_mnt_idmap, parent_inode->i_sb, NULL, S_IFDIR, SRSFS_ROOT_ID + 2);
+    struct inode* inode =
+        srsfs_get_inode(&nop_mnt_idmap, parent_inode->i_sb, NULL, S_IFDIR, SRSFS_ROOT_ID + 2);
+    d_add(child_dentry, inode);
+  } else if (root == SRSFS_ROOT_ID && !strcmp(name, "new_file.txt")) {
+    struct inode* inode =
+        srsfs_get_inode(&nop_mnt_idmap, parent_inode->i_sb, NULL, S_IFREG, SRSFS_ROOT_ID + 3);
     d_add(child_dentry, inode);
   }
   return NULL;
 }
 
-struct inode_operations srsfs_inode_ops = {
+static struct inode_operations srsfs_inode_ops = {
     .lookup = srsfs_lookup,
+    .create = srsfs_create,
 };
+
+static int srsfs_create(
+    struct mnt_idmap* idmap,
+    struct inode* parent_inode,
+    struct dentry* child_dentry,
+    umode_t mode,
+    bool b
+) {
+  ino_t root = parent_inode->i_ino;
+  const char* name = child_dentry->d_name.name;
+  if (root == SRSFS_ROOT_ID && !strcmp(name, "test.txt")) {
+    struct inode* inode =
+        srsfs_get_inode(idmap, parent_inode->i_sb, NULL, S_IFREG | S_IRWXUGO, SRSFS_ROOT_ID + 1);
+    inode->i_op = &srsfs_inode_ops;
+    inode->i_fop = NULL;
+
+    d_add(child_dentry, inode);
+  } else if (root == SRSFS_ROOT_ID && !strcmp(name, "new_file.txt")) {
+    struct inode* inode =
+        srsfs_get_inode(idmap, parent_inode->i_sb, NULL, S_IFREG | S_IRWXUGO, SRSFS_ROOT_ID + 2);
+    inode->i_op = &srsfs_inode_ops;
+    inode->i_fop = NULL;
+
+    d_add(child_dentry, inode);
+  }
+  return 0;
+}
 
 static struct inode* srsfs_get_inode(
     struct mnt_idmap* idmap,
@@ -92,7 +117,7 @@ static struct inode* srsfs_get_inode(
 ) {
   struct inode* inode = new_inode(sb);
   if (inode == NULL)
-    LOG("failed to create root inode\n");
+    LOG("failed to create inode\n");
   else {
     inode_init_owner(idmap, inode, dir, mode);
     inode->i_ino = i_ino;
@@ -136,8 +161,36 @@ static void set_fs_params(void) {
   srsfs_fs_type.kill_sb = srsfs_kill;
 }
 
+static void prepare_lists(void) {
+  for (int i = 0; i < 100; ++i) {
+    dirs[i].state = UNUSED;
+    for (int j = 0; j < SRSFS_DIR_CAP; ++j) {
+      dirs[i].content[j].state = UNUSED;
+    }
+  }
+}
+
+static void insert_test_data(void) {
+  dirs[0].state = USED;
+  strcpy(rootdir->name, "srsroot");
+  rootdir->content[0].state = USED;
+  strcpy(rootdir->content[0].name, "file.txt");
+  rootdir->content[0].is_dir = 0;
+  rootdir->content[0].id = SRSFS_ROOT_ID + ++fcnt;
+  rootdir->content[1].state = USED;
+  strcpy(rootdir->content[1].name, "dir");
+  rootdir->content[1].is_dir = 1;
+  rootdir->content[1].ptr = dirs + 1;
+  dirs[1].state = USED;
+  strcpy(dirs[1].name, "dir");
+  rootdir->content[1].id = SRSFS_ROOT_ID + ++fcnt;
+}
+
 static int __init srsfs_init(void) {
   LOG("SRSFS joined the kernel\n");
+  prepare_lists();
+  rootdir = dirs;
+  insert_test_data();
   set_fs_params();
   register_filesystem(&srsfs_fs_type);
   LOG("SRSFS successfully registered\n");
