@@ -92,20 +92,26 @@ static int srsfs_create(
 ) {
   ino_t root = parent_inode->i_ino;
   const char* name = child_dentry->d_name.name;
-  if (root == SRSFS_ROOT_ID && !strcmp(name, "test.txt")) {
-    struct inode* inode =
-        srsfs_get_inode(idmap, parent_inode->i_sb, NULL, S_IFREG | S_IRWXUGO, SRSFS_ROOT_ID + 1);
-    inode->i_op = &srsfs_inode_ops;
-    inode->i_fop = NULL;
-
-    d_add(child_dentry, inode);
-  } else if (root == SRSFS_ROOT_ID && !strcmp(name, "new_file.txt")) {
-    struct inode* inode =
-        srsfs_get_inode(idmap, parent_inode->i_sb, NULL, S_IFREG | S_IRWXUGO, SRSFS_ROOT_ID + 2);
-    inode->i_op = &srsfs_inode_ops;
-    inode->i_fop = NULL;
-
-    d_add(child_dentry, inode);
+  if (root == SRSFS_ROOT_ID) {
+    for (int i = 0; i < SRSFS_DIR_CAP; ++i) {
+      if (strcmp(rootdir->content[i].name, name) == 0)
+        return -EEXIST;
+    }
+    for (int i = 0; i < SRSFS_DIR_CAP; ++i) {
+      if (rootdir->content[i].state == UNUSED) {
+        rootdir->content[i].state = USED;
+        strcpy(rootdir->content[i].name, name);
+        rootdir->content[i].id = SRSFS_ROOT_ID + ++fcnt;
+        rootdir->content[i].is_dir = 0;
+        struct inode* inode = srsfs_get_inode(
+            idmap, parent_inode->i_sb, NULL, S_IFREG | S_IRWXUGO, rootdir->content[i].id
+        );
+        inode->i_op = &srsfs_inode_ops;
+        inode->i_fop = NULL;
+        d_add(child_dentry, inode);
+        return 0;
+      }
+    }
   }
   return 0;
 }
