@@ -33,6 +33,9 @@ struct srsfs_dir {
   struct srsfs_file content[SRSFS_DIR_CAP];
   enum srsfs_fstate state;
 };
+
+static void init_file(struct srsfs_file* file, const char* name);
+
 static int srsfs_iterate(struct file* filp, struct dir_context* ctx);
 
 static int srsfs_create(struct mnt_idmap*, struct inode*, struct dentry*, umode_t, bool);

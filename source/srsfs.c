@@ -55,6 +55,16 @@ struct file_operations srsfs_dir_ops = {
     .iterate_shared = srsfs_iterate,
 };
 
+static void init_file(struct srsfs_file* file, const char* name) {
+  if (file->state == USED)
+    return;
+  file->state = USED;
+  strncpy(file->name, name, SRSFS_FILENAME_LEN);
+  file->name[SRSFS_FILENAME_LEN - 1] = 0;
+  file->is_dir = 0;
+  file->id = SRSFS_ROOT_ID + ++fcnt;
+}
+
 static struct dentry* srsfs_lookup(
     struct inode* parent_inode, struct dentry* child_dentry, unsigned int flag
 ) {
@@ -99,10 +109,7 @@ static int srsfs_create(
     }
     for (int i = 0; i < SRSFS_DIR_CAP; ++i) {
       if (rootdir->content[i].state == UNUSED) {
-        rootdir->content[i].state = USED;
-        strcpy(rootdir->content[i].name, name);
-        rootdir->content[i].id = SRSFS_ROOT_ID + ++fcnt;
-        rootdir->content[i].is_dir = 0;
+        init_file(rootdir->content + i, name);
         struct inode* inode = srsfs_get_inode(
             idmap, parent_inode->i_sb, NULL, S_IFREG | S_IRWXUGO, rootdir->content[i].id
         );
@@ -181,10 +188,7 @@ static void prepare_lists(void) {
 static void insert_test_data(void) {
   dirs[0].state = USED;
   strcpy(rootdir->name, "srsroot");
-  rootdir->content[0].state = USED;
-  strcpy(rootdir->content[0].name, "file.txt");
-  rootdir->content[0].is_dir = 0;
-  rootdir->content[0].id = SRSFS_ROOT_ID + ++fcnt;
+  init_file(rootdir->content, "file.txt");
   rootdir->content[1].state = USED;
   strcpy(rootdir->content[1].name, "dir");
   rootdir->content[1].is_dir = 1;
