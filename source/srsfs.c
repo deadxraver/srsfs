@@ -65,6 +65,13 @@ static void init_file(struct srsfs_file* file, const char* name) {
   file->id = SRSFS_ROOT_ID + ++fcnt;
 }
 
+static void destroy_file(struct srsfs_file* file) {
+  file->state = UNUSED;
+  memset(file->name, 0, SRSFS_FILENAME_LEN);
+  file->is_dir = 0;
+  file->id = 0;
+}
+
 static struct dentry* srsfs_lookup(
     struct inode* parent_inode, struct dentry* child_dentry, unsigned int flag
 ) {
@@ -130,7 +137,7 @@ static int srsfs_unlink(struct inode* parent_inode, struct dentry* child_dentry)
   if (root == SRSFS_ROOT_ID) {
     for (int i = 0; i < SRSFS_DIR_CAP; ++i) {
       if (strcmp(rootdir->content[i].name, name) == 0) {
-        rootdir->content[i].state = UNUSED;
+        destroy_file(rootdir->content + i);
         return 0;
       }
     }
@@ -196,7 +203,7 @@ static void prepare_lists(void) {
   for (int i = 0; i < 100; ++i) {
     dirs[i].state = UNUSED;
     for (int j = 0; j < SRSFS_DIR_CAP; ++j) {
-      dirs[i].content[j].state = UNUSED;
+      destroy_file(dirs[i].content + j);
     }
   }
 }

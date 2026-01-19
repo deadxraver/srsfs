@@ -36,6 +36,8 @@ struct srsfs_dir {
 
 static void init_file(struct srsfs_file* file, const char* name);
 
+static void destroy_file(struct srsfs_file* file);
+
 static int srsfs_iterate(struct file* filp, struct dir_context* ctx);
 
 static int srsfs_create(struct mnt_idmap*, struct inode*, struct dentry*, umode_t, bool);
