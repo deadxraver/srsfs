@@ -40,6 +40,8 @@ static int srsfs_iterate(struct file* filp, struct dir_context* ctx);
 
 static int srsfs_create(struct mnt_idmap*, struct inode*, struct dentry*, umode_t, bool);
 
+static int srsfs_unlink(struct inode* parent_inode, struct dentry* child_dentry);
+
 static struct dentry* srsfs_lookup(
     struct inode* parent_inode, struct dentry* child_dentry, unsigned int flag
 );

@@ -91,6 +91,7 @@ static struct dentry* srsfs_lookup(
 static struct inode_operations srsfs_inode_ops = {
     .lookup = srsfs_lookup,
     .create = srsfs_create,
+    .unlink = srsfs_unlink,
 };
 
 static int srsfs_create(
@@ -119,6 +120,21 @@ static int srsfs_create(
         return 0;
       }
     }
+  }
+  return 0;
+}
+
+static int srsfs_unlink(struct inode* parent_inode, struct dentry* child_dentry) {
+  const char* name = child_dentry->d_name.name;
+  ino_t root = parent_inode->i_ino;
+  if (root == SRSFS_ROOT_ID) {
+    for (int i = 0; i < SRSFS_DIR_CAP; ++i) {
+      if (strcmp(rootdir->content[i].name, name) == 0) {
+        rootdir->content[i].state = UNUSED;
+        return 0;
+      }
+    }
+    return -ENOENT;
   }
   return 0;
 }
