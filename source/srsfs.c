@@ -32,7 +32,8 @@ static int srsfs_iterate(struct file* filp, struct dir_context* ctx) {
   }
 
   if (ino == SRSFS_ROOT_ID) {
-    for (int i = ctx->pos - 2; i < SRSFS_DIR_CAP; ++i) { // there might be a problem with this solution, need to be tested
+    for (int i = ctx->pos - 2; i < SRSFS_DIR_CAP;
+         ++i) {  // there might be a problem with this solution, need to be tested
       if (rootdir->content[i].state == UNUSED)
         continue;
       if (!dir_emit(
@@ -57,21 +58,22 @@ struct file_operations srsfs_dir_ops = {
 static struct dentry* srsfs_lookup(
     struct inode* parent_inode, struct dentry* child_dentry, unsigned int flag
 ) {
-  return NULL;  // TODO: remove, is set to test srsfs_iterate
   ino_t root = parent_inode->i_ino;
   const char* name = child_dentry->d_name.name;
-  if (root == SRSFS_ROOT_ID && !strcmp(name, "test.txt")) {
-    struct inode* inode =
-        srsfs_get_inode(&nop_mnt_idmap, parent_inode->i_sb, NULL, S_IFREG, SRSFS_ROOT_ID + 1);
-    d_add(child_dentry, inode);
-  } else if (root == SRSFS_ROOT_ID && !strcmp(name, "dir")) {
-    struct inode* inode =
-        srsfs_get_inode(&nop_mnt_idmap, parent_inode->i_sb, NULL, S_IFDIR, SRSFS_ROOT_ID + 2);
-    d_add(child_dentry, inode);
-  } else if (root == SRSFS_ROOT_ID && !strcmp(name, "new_file.txt")) {
-    struct inode* inode =
-        srsfs_get_inode(&nop_mnt_idmap, parent_inode->i_sb, NULL, S_IFREG, SRSFS_ROOT_ID + 3);
-    d_add(child_dentry, inode);
+  if (root == SRSFS_ROOT_ID) {
+    for (int i = 0; i < SRSFS_DIR_CAP; ++i) {
+      if (!strcmp(name, rootdir->content[i].name)) {
+        struct inode* inode = srsfs_get_inode(
+            &nop_mnt_idmap,
+            parent_inode->i_sb,
+            NULL,
+            rootdir->content[i].is_dir ? S_IFDIR : S_IFREG,
+            rootdir->content[i].id
+        );
+        d_add(child_dentry, inode);
+        return NULL;
+      }
+    }
   }
   return NULL;
 }
