@@ -299,16 +299,19 @@ static int srsfs_create(
 static int srsfs_unlink(struct inode* parent_inode, struct dentry* child_dentry) {
   const char* name = child_dentry->d_name.name;
   ino_t root = parent_inode->i_ino;
-  if (root == SRSFS_ROOT_ID) {
-    for (int i = 0; i < SRSFS_DIR_CAP; ++i) {
-      if (strcmp(rootdir->content[i].name, name) == 0) {
-        destroy_file(rootdir->content + i);
-        return 0;
-      }
+  for (size_t i = 0; i < 100; ++i) {
+    if (dirs[i].state == UNUSED || dirs[i].id != root)
+      continue;
+    for (size_t j = 0; j < SRSFS_DIR_CAP; ++j) {
+      if (dirs[i].content[j].state == UNUSED)
+        continue;
+      if (strcmp(dirs[i].content[j].name, name))
+        continue;
+      destroy_file(dirs[i].content + j);
+      return 0;
     }
-    return -ENOENT;
   }
-  return 0;
+  return -ENOENT;
 }
 
 static int srsfs_mkdir(
