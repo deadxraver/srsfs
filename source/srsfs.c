@@ -106,38 +106,21 @@ static int srsfs_iterate(struct file* filp, struct dir_context* ctx) {
     ctx->pos++;
   }
 
-  if (ino == SRSFS_ROOT_ID) {
-    for (int i = ctx->pos - 2; i < SRSFS_DIR_CAP;
-         ++i) {  // there might be a problem with this solution, need to be tested
-      if (rootdir->content[i].state == UNUSED)
+  for (size_t i = 0; i < 100; ++i) {
+    if (dirs[i].state == UNUSED || dirs[i].id != ino)
+      continue;
+    for (size_t j = ctx->pos - 2; j < SRSFS_DIR_CAP; ++j) {
+      if (dirs[i].content[j].state == UNUSED)
         continue;
       if (!dir_emit(
               ctx,
-              rootdir->content[i].name,
-              strlen(rootdir->content[i].name),
-              rootdir->content[i].id,
-              (rootdir->content[i].is_dir ? DT_DIR : DT_REG)
+              dirs[i].content[j].name,
+              strlen(dirs[i].content[j].name),
+              dirs[i].content[j].id,
+              (dirs[i].content[j].is_dir ? DT_DIR : DT_REG)
           ))
         return 0;
       ctx->pos++;
-    }
-  } else {
-    for (size_t i = 0; i < 100; ++i) {
-      if (dirs[i].state == UNUSED || dirs[i].id != ino)
-        continue;
-      for (size_t j = ctx->pos - 2; j < SRSFS_DIR_CAP; ++j) {
-        if (dirs[i].content[j].state == UNUSED)
-          continue;
-        if (!dir_emit(
-                ctx,
-                dirs[i].content[j].name,
-                strlen(dirs[i].content[j].name),
-                dirs[i].content[j].id,
-                (dirs[i].content[j].is_dir ? DT_DIR : DT_REG)
-            ))
-          return 0;
-        ctx->pos++;
-      }
     }
   }
 
@@ -209,39 +192,23 @@ static struct dentry* srsfs_lookup(
 ) {
   ino_t root = parent_inode->i_ino;
   const char* name = child_dentry->d_name.name;
-  if (root == SRSFS_ROOT_ID) {
-    for (int i = 0; i < SRSFS_DIR_CAP; ++i) {
-      if (!strcmp(name, rootdir->content[i].name)) {
-        struct inode* inode = srsfs_get_inode(
-            &nop_mnt_idmap,
-            parent_inode->i_sb,
-            NULL,
-            rootdir->content[i].is_dir ? S_IFDIR : S_IFREG,
-            rootdir->content[i].id
-        );
-        d_add(child_dentry, inode);
-        return NULL;
-      }
-    }
-  } else {
-    for (size_t i = 0; i < 100; ++i) {
-      if (dirs[i].state == UNUSED || dirs[i].id != root)
+  for (size_t i = 0; i < 100; ++i) {
+    if (dirs[i].state == UNUSED || dirs[i].id != root)
+      continue;
+    for (size_t j = 0; j < SRSFS_DIR_CAP; ++j) {
+      if (dirs[i].content[j].state == UNUSED)
         continue;
-      for (size_t j = 0; j < SRSFS_DIR_CAP; ++j) {
-        if (dirs[i].content[j].state == UNUSED)
-          continue;
-        if (strcmp(dirs[i].content[j].name, name))
-          continue;
-        struct inode* inode = srsfs_get_inode(
-            &nop_mnt_idmap,
-            parent_inode->i_sb,
-            NULL,
-            dirs[i].content[j].is_dir ? S_IFDIR : S_IFREG,
-            dirs[i].content[j].id
-        );
-        d_add(child_dentry, inode);
-        return NULL;
-      }
+      if (strcmp(dirs[i].content[j].name, name))
+        continue;
+      struct inode* inode = srsfs_get_inode(
+          &nop_mnt_idmap,
+          parent_inode->i_sb,
+          NULL,
+          dirs[i].content[j].is_dir ? S_IFDIR : S_IFREG,
+          dirs[i].content[j].id
+      );
+      d_add(child_dentry, inode);
+      return NULL;
     }
   }
   return NULL;
@@ -256,40 +223,19 @@ static int srsfs_create(
 ) {
   ino_t root = parent_inode->i_ino;
   const char* name = child_dentry->d_name.name;
-  if (root == SRSFS_ROOT_ID) {
-    for (int i = 0; i < SRSFS_DIR_CAP; ++i) {
-      if (strcmp(rootdir->content[i].name, name) == 0)
-        return -EEXIST;
-    }
-    for (int i = 0; i < SRSFS_DIR_CAP; ++i) {
-      if (rootdir->content[i].state == UNUSED) {
-        init_file(rootdir->content + i, name);
+  for (size_t i = 0; i < 100; ++i) {
+    if (dirs[i].state == UNUSED)
+      continue;
+    if (dirs[i].id == root) {
+      for (size_t j = 0; j < SRSFS_DIR_CAP; ++j) {
+        if (dirs[i].content[j].state == USED)
+          continue;
+        init_file(dirs[i].content + j, name);
         struct inode* inode = srsfs_get_inode(
-            idmap, parent_inode->i_sb, NULL, S_IFREG | S_IRWXUGO, rootdir->content[i].id
+            idmap, parent_inode->i_sb, NULL, S_IFREG | S_IRWXUGO, dirs[i].content[j].id
         );
-        inode->i_op = &srsfs_inode_ops;
-        inode->i_fop = &srsfs_file_ops;
         d_add(child_dentry, inode);
         return 0;
-      }
-    }
-  } else {
-    for (size_t i = 0; i < 100; ++i) {
-      if (dirs[i].state == UNUSED)
-        continue;
-      if (dirs[i].id == root) {
-        for (size_t j = 0; j < SRSFS_DIR_CAP; ++j) {
-          if (dirs[i].content[j].state == USED)
-            continue;
-          init_file(dirs[i].content + j, name);
-          struct inode* inode = srsfs_get_inode(
-              idmap, parent_inode->i_sb, NULL, S_IFREG | S_IRWXUGO, dirs[i].content[j].id
-          );
-          inode->i_op = &srsfs_inode_ops;
-          inode->i_fop = &srsfs_file_ops;
-          d_add(child_dentry, inode);
-          return 0;
-        }
       }
     }
   }
