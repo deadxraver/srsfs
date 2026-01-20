@@ -31,8 +31,37 @@ struct file_operations srsfs_file_ops = {
 static int srsfs_link(
     struct dentry* old_dentry, struct inode* parent_dir, struct dentry* new_dentry
 ) {
-  // TODO:
-  return 0;
+  const char* name = new_dentry->d_name.name;
+  struct inode* old_inode = d_inode(old_dentry);
+  struct srsfs_file* old_file = getfile(old_inode->i_ino);
+  if (S_ISDIR(old_inode->i_mode))
+    return -EPERM;
+  ino_t root = parent_dir->i_ino;
+  struct srsfs_dir* rdir = root == SRSFS_ROOT_ID ? rootdir : getfile(root)->ptr;
+  for (size_t i = 0; i < SRSFS_DIR_CAP; ++i) {
+    if (rdir->content[i].state == UNUSED)
+      continue;
+    if (strcmp(name, rdir->content[i].name) == 0)
+      return -EEXIST;
+  }
+  for (size_t i = 0; i < SRSFS_DIR_CAP; ++i) {
+    if (rdir->content[i].state == USED)
+      continue;
+    init_file(rdir->content + i, name, 0);
+    strncpy(rdir->content[i].name, name, SRSFS_FILENAME_LEN);
+    rdir->content[i].name[SRSFS_FILENAME_LEN - 1] = 0;
+    rdir->content[i].sd = old_file->sd;
+    rdir->content[i].id = old_file->id;
+    ++(old_file->sd->refcount);
+    struct inode* new_inode = srsfs_get_inode(
+        &nop_mnt_idmap, parent_dir->i_sb, parent_dir, old_inode->i_mode, old_inode->i_ino
+    );
+    set_nlink(new_inode, rdir->content[i].sd->refcount);
+    set_nlink(old_inode, rdir->content[i].sd->refcount);
+    d_instantiate(new_dentry, new_inode);
+    return 0;
+  }
+  return -ENOSPC;
 }
 
 struct srsfs_file* getfile(int ino) {
