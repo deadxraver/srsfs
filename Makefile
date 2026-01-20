@@ -16,8 +16,8 @@ test: all
 	mkdir -p /mnt/srsfs/
 	mkdir -p testtmp/
 	mount -t srsfs todo /mnt/srsfs/
-	cat /dev/random | dd count=1 > testtmp/f
-	cp testtmp/f /mnt/srsfs/
+	cat /dev/random | dd count=5 > /mnt/srsfs/f
+	cp /mnt/srsfs/f testtmp/f
 	test "$$(diff testtmp/f /mnt/srsfs/f)" = ""
 	cat /dev/random | dd count=10 > testtmp/ff
 	cp testtmp/ff /mnt/srsfs/
@@ -26,5 +26,9 @@ test: all
 	ln /mnt/srsfs/ff /mnt/srsfs/lnff
 	test "$$(diff /mnt/srsfs/ff /mnt/srsfs/lnff)" = ""
 	@echo 'ln tests OK'
+	umount /mnt/srsfs
+	mount -t srsfs todo /mnt/srsfs
+	test "$$(diff testtmp/f /mnt/srsfs/f)" = ""
+	@echo 'umount mount OK'
 	umount /mnt/srsfs
 	rmmod srsfs

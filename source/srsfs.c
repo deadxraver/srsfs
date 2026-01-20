@@ -489,19 +489,13 @@ static int __init srsfs_init(void) {
 static void __exit srsfs_exit(void) {
   unregister_filesystem(&srsfs_fs_type);
   LOG("SRSFS unregistered successfully\n");
-  int cnt = 0;
   for (size_t i = 0; i < 100; ++i) {
     if (dirs[i].state == UNUSED)
       continue;
     for (size_t j = 0; j < SRSFS_DIR_CAP; ++j) {
-      if (dirs[i].content[j].sd == NULL)
-        continue;
-      free_shared(dirs[i].content[j].sd, 1);
-      dirs[i].content[j].sd = NULL;
-      ++cnt;
+      destroy_file(dirs[i].content + j);
     }
   }
-  LOG("Cleaned up %d regs\n", cnt);
   LOG("SRSFS left the kernel\n");
 }
 
