@@ -17,3 +17,4 @@ modules.order
 # Clangd
 compile_commands.json
 .cache/
+testtmp/
