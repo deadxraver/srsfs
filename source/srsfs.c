@@ -319,44 +319,43 @@ static int srsfs_mkdir(
 ) {
   const char* name = child_dentry->d_name.name;
   ino_t root = parent_inode->i_ino;
-  if (root == SRSFS_ROOT_ID) {
-    for (size_t i = 0; i < SRSFS_DIR_CAP; ++i) {
-      if (rootdir->content[i].state == UNUSED) {
-        struct srsfs_dir* dir = alloc_dir();
-        if (dir == NULL)
-          return -ENOMEM;
-        init_dir(dir, name, rootdir->content + i);
-        struct inode* inode = srsfs_get_inode(
-            idmap, parent_inode->i_sb, NULL, S_IFDIR | S_IRWXUGO, rootdir->content[i].id
-        );
-        inode->i_op = &srsfs_inode_ops;
-        inode->i_fop = &srsfs_dir_ops;
-        d_add(child_dentry, inode);
-        return 0;
-      }
+  for (size_t i = 0; i < 100; ++i) {
+    if (dirs[i].state == UNUSED || dirs[i].id != root)
+      continue;
+    for (size_t j = 0; j < SRSFS_DIR_CAP; ++j) {
+      if (dirs[i].content[j].state == USED)
+        continue;
+      struct srsfs_dir* dir = alloc_dir();
+      if (dir == NULL)
+        return -ENOMEM;
+      init_dir(dir, name, dirs[i].content + j);
+      struct inode* inode = srsfs_get_inode(
+          idmap, parent_inode->i_sb, NULL, S_IFDIR | S_IRWXUGO, dirs[i].content[j].id
+      );
+      d_add(child_dentry, inode);
+      return 0;
     }
-    return -ENOMEM;
   }
-  return 0;
+  return -ENOENT;
 }
 
 static int srsfs_rmdir(struct inode* parent_inode, struct dentry* child_dentry) {
   const char* name = child_dentry->d_name.name;
   ino_t root = parent_inode->i_ino;
-  if (root == SRSFS_ROOT_ID) {
-    for (size_t i = 0; i < SRSFS_DIR_CAP; ++i) {
-      if (strcmp(name, rootdir->content[i].name) == 0) {
-        if (!rootdir->content[i].is_dir)
-          return 1;
-        if (!is_empty(rootdir->content[i].ptr))
-          return 1;
-        destroy_file(rootdir->content + i);
-        return 0;
-      }
+  for (size_t i = 0; i < 100; ++i) {
+    if (dirs[i].state == UNUSED || dirs[i].id != root)
+      continue;
+    for (size_t j = 0; j < SRSFS_DIR_CAP; ++j) {
+      if (dirs[i].content[j].state == UNUSED || !dirs[i].content[j].is_dir ||
+          strcmp(dirs[i].content[j].name, name))
+        continue;
+      if (!is_empty(dirs[i].content[j].ptr))
+        return -1;
+      destroy_file(dirs[i].content + j);
+      return 0;
     }
-    return -ENOENT;
   }
-  return 0;
+  return -ENOENT;
 }
 
 static struct inode* srsfs_get_inode(
