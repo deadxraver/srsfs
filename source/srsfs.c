@@ -28,6 +28,13 @@ struct file_operations srsfs_file_ops = {
     .write = srsfs_write,
 };
 
+static void free_shared(struct shared_data* node, bool force) {
+  if (node == NULL || (--(node->refcount) > 0 && !force))
+    return;
+  free_shared(node->next, 1);
+  kfree(node);
+}
+
 static int srsfs_link(
     struct dentry* old_dentry, struct inode* parent_dir, struct dentry* new_dentry
 ) {
@@ -87,18 +94,30 @@ static ssize_t srsfs_read(struct file* filp, char* buffer, size_t len, loff_t* o
     return -EISDIR;
   if (f->sd == NULL)
     return -EIO;
-  char* data = f->sd->data;
-  size_t sz = f->sd->sz;
-  if (*offset >= sz)
+  struct shared_data* sd = f->sd;
+  loff_t local_offset = *offset;
+  while (sd != NULL && local_offset >= sd->sz) {
+    local_offset -= sd->sz;
+    sd = sd->next;
+  }
+  if (sd == NULL)
     return 0;
-  size_t to_read = len;
-  size_t available = sz - *offset;
-  if (to_read > available)
-    to_read = available;
-  if (copy_to_user(buffer, data + *offset, to_read))
+  size_t to_read = min(len, sd->sz - local_offset);
+  if (copy_to_user(buffer, sd->data + local_offset, to_read))
     return -EFAULT;
-  *offset += to_read;
-  return to_read;
+  size_t total_read = to_read;
+  while (total_read < len && sd->next != NULL) {
+    sd = sd->next;
+    size_t chunk = min(len - total_read, sd->sz);
+    if (chunk == 0)
+      break;
+    if (copy_to_user(buffer + total_read, sd->data, chunk))
+      return -EFAULT;
+    total_read += chunk;
+  }
+
+  *offset += total_read;
+  return total_read;
 }
 
 static ssize_t srsfs_write(struct file* filp, const char* buffer, size_t len, loff_t* offset) {
@@ -108,22 +127,55 @@ static ssize_t srsfs_write(struct file* filp, const char* buffer, size_t len, lo
     return -ENOENT;
   if (f->is_dir)
     return -EISDIR;
-  if (*offset > SRSFS_FSIZE)
-    return -EFBIG;
-  size_t available = SRSFS_FSIZE - *offset;
-  size_t to_write = min(len, available);
 
-  if (to_write == 0)
-    return -ENOSPC;
-  if (f->sd == NULL)
-    return -EIO;
-  char* data = f->sd->data;
-  if (copy_from_user(data + *offset, buffer, len))
-    return -EFAULT;
-  if (*offset + to_write > f->sd->sz)
-    f->sd->sz = *offset + to_write;
-  *offset += to_write;
-  return to_write;
+  if (f->sd == NULL) {
+    f->sd = kmalloc(sizeof(struct shared_data), GFP_KERNEL);
+    if (!f->sd)
+      return -ENOMEM;
+    f->sd->refcount = 1;
+    f->sd->sz = 0;
+    f->sd->next = NULL;
+  }
+  struct shared_data* sd = f->sd;
+  loff_t local_offset = *offset;
+  while (local_offset >= SRSFS_FSIZE) {
+    local_offset -= SRSFS_FSIZE;
+    if (sd->next == NULL) {
+      sd->next = kmalloc(sizeof(struct shared_data), GFP_KERNEL);
+      if (!sd->next)
+        return -ENOMEM;
+      sd->next->refcount = 1;
+      sd->next->sz = 0;
+      sd->next->next = NULL;
+    }
+    sd = sd->next;
+  }
+  size_t total_written = 0;
+  while (total_written < len) {
+    size_t to_write = len - total_written < SRSFS_FSIZE - local_offset ? len - total_written
+                                                                       : SRSFS_FSIZE - local_offset;
+
+    if (copy_from_user(sd->data + local_offset, buffer + total_written, to_write))
+      return -EFAULT;
+    if (local_offset + to_write > sd->sz)
+      sd->sz = local_offset + to_write;
+    total_written += to_write;
+    local_offset = 0;
+    if (total_written < len) {
+      if (sd->next == NULL) {
+        sd->next = kmalloc(sizeof(struct shared_data), GFP_KERNEL);
+        if (sd->next == NULL)
+          return -ENOMEM;
+        sd->next->refcount = 1;
+        sd->next->sz = 0;
+        sd->next->next = NULL;
+      }
+      sd = sd->next;
+    }
+  }
+
+  *offset += total_written;
+  return total_written;
 }
 
 static int srsfs_iterate(struct file* filp, struct dir_context* ctx) {
@@ -180,6 +232,7 @@ static void init_file(struct srsfs_file* file, const char* name, bool do_alloc) 
     file->sd = (struct shared_data*)kmalloc(sizeof(struct shared_data), GFP_KERNEL);
     file->sd->refcount = 1;
     file->sd->sz = 0;
+    file->sd->next = NULL;
   } else
     file->sd = NULL;
 }
@@ -195,9 +248,7 @@ static void destroy_file(struct srsfs_file* file) {
   file->id = 0;
   if (file->sd == NULL)
     return;
-  --(file->sd->refcount);
-  if (file->sd->refcount == 0)
-    kfree(file->sd);
+  free_shared(file->sd, 0);
   file->sd = NULL;
 }
 
@@ -438,19 +489,13 @@ static int __init srsfs_init(void) {
 static void __exit srsfs_exit(void) {
   unregister_filesystem(&srsfs_fs_type);
   LOG("SRSFS unregistered successfully\n");
-  int cnt = 0;
   for (size_t i = 0; i < 100; ++i) {
     if (dirs[i].state == UNUSED)
       continue;
     for (size_t j = 0; j < SRSFS_DIR_CAP; ++j) {
-      if (dirs[i].content[j].sd == NULL)
-        continue;
-      kfree(dirs[i].content[j].sd);
-      dirs[i].content[j].sd = NULL;
-      ++cnt;
+      destroy_file(dirs[i].content + j);
     }
   }
-  LOG("Cleaned up %d regs\n", cnt);
   LOG("SRSFS left the kernel\n");
 }
 

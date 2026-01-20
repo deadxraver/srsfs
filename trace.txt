@@ -1,0 +1,52 @@
+root@srsfs-test:/sys/kernel/debug/tracing# echo 1 > tracing_on
+root@srsfs-test:/sys/kernel/debug/tracing# echo nop > current_tracer
+root@srsfs-test:/sys/kernel/debug/tracing# for p in events/syscalls/sys*socket*/enable ; do echo 1 > $p; done
+==== ТЫКАЕМСЯ в сисколы =======
+root@srsfs-test:/sys/kernel/debug/tracing# for p in events/syscalls/sys*socket*/enable ; do echo 0 > $p; done
+root@srsfs-test:/sys/kernel/debug/tracing# cat trace
+# tracer: nop
+#
+# entries-in-buffer/entries-written: 34/34   #P:8
+#
+#                                _-----=> irqs-off/BH-disabled
+#                               / _----=> need-resched
+#                              | / _---=> hardirq/softirq
+#                              || / _--=> preempt-depth
+#                              ||| / _-=> migrate-disable
+#                              |||| /     delay
+#           TASK-PID     CPU#  |||||  TIMESTAMP  FUNCTION
+#              | |         |   |||||     |         |
+       messenger-7012    [007] ...1. 20580.321038: sys_socket(family: 2, type: 2, protocol: 0)
+       messenger-7012    [007] ...1. 20580.321093: sys_socket -> 0x6
+       messenger-7012    [007] ...1. 20581.121166: sys_socket(family: 2, type: 2, protocol: 0)
+       messenger-7012    [007] ...1. 20581.121186: sys_socket -> 0x7
+  systemd-logind-760     [003] ...1. 20581.947115: sys_socket(family: 1, type: 80002, protocol: 0)
+  systemd-logind-760     [003] ...1. 20581.947143: sys_socket -> 0x1b
+       messenger-7012    [007] ...1. 20582.302180: sys_socket(family: 2, type: 2, protocol: 0)
+       messenger-7012    [007] ...1. 20582.302195: sys_socket -> 0x8
+       messenger-7129    [007] ...1. 20590.643860: sys_socket(family: 2, type: 2, protocol: 0)
+       messenger-7129    [007] ...1. 20590.643876: sys_socket -> 0x3
+       messenger-7129    [007] ...1. 20591.570648: sys_socket(family: 2, type: 2, protocol: 0)
+       messenger-7129    [007] ...1. 20591.570664: sys_socket -> 0x4
+       messenger-7129    [007] ...1. 20592.259359: sys_socket(family: 2, type: 2, protocol: 0)
+       messenger-7129    [007] ...1. 20592.259376: sys_socket -> 0x5
+ systemd-timesyn-420     [001] ...1. 20598.315729: sys_socket(family: 1, type: 80002, protocol: 0)
+ systemd-timesyn-420     [001] ...1. 20598.315750: sys_socket -> 0x11
+   systemd-udevd-427     [001] ...1. 21247.477812: sys_socket(family: 1, type: 80002, protocol: 0)
+   systemd-udevd-427     [001] ...1. 21247.477876: sys_socket -> 0xe
+       messenger-7236    [005] ...1. 21258.754172: sys_socket(family: 2, type: a, protocol: 0)
+       messenger-7236    [005] ...1. 21258.754236: sys_socket -> 0xffffffffffffffff
+       messenger-7236    [005] ...1. 21261.253809: sys_socket(family: 2, type: a, protocol: 0)
+       messenger-7236    [005] ...1. 21261.253822: sys_socket -> 0xffffffffffffffff
+       messenger-7236    [005] ...1. 21262.629684: sys_socket(family: 2, type: a, protocol: 0)
+       messenger-7236    [005] ...1. 21262.629697: sys_socket -> 0xffffffffffffffff
+       messenger-7236    [005] ...1. 21264.060123: sys_socket(family: 2, type: a, protocol: 0)
+       messenger-7236    [005] ...1. 21264.060135: sys_socket -> 0xffffffffffffffff
+       messenger-7270    [007] ...1. 21416.401846: sys_socket(family: 2, type: 1, protocol: 0)
+       messenger-7270    [007] ...1. 21416.401893: sys_socket -> 0x3
+       messenger-7270    [007] ...1. 21418.288637: sys_socket(family: 2, type: 1, protocol: 0)
+       messenger-7270    [007] ...1. 21418.288682: sys_socket -> 0x4
+       messenger-7270    [007] ...1. 21419.695495: sys_socket(family: 2, type: 1, protocol: 0)
+       messenger-7270    [007] ...1. 21419.695513: sys_socket -> 0x5
+       messenger-7270    [007] ...1. 21421.168129: sys_socket(family: 2, type: 1, protocol: 0)
+       messenger-7270    [007] ...1. 21421.168154: sys_socket -> 0x6
