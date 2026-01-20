@@ -153,7 +153,9 @@ static void init_dir(struct srsfs_dir* dir, const char* name, struct srsfs_file*
     init_file(assoc_file, name);
     assoc_file->is_dir = 1;
     assoc_file->ptr = dir;
-  }
+    dir->id = assoc_file->id;
+  } else
+    dir->id = SRSFS_ROOT_ID + ++fcnt;
   dir->state = USED;
   for (size_t i = 0; i < SRSFS_DIR_CAP; ++i) {
     dir->content[i].state = UNUSED;
@@ -233,8 +235,27 @@ static int srsfs_create(
         return 0;
       }
     }
+  } else {
+    for (size_t i = 0; i < 100; ++i) {
+      if (dirs[i].state == UNUSED)
+        continue;
+      if (dirs[i].id == root) {
+        for (size_t j = 0; j < SRSFS_DIR_CAP; ++j) {
+          if (dirs[i].content[j].state == USED)
+            continue;
+          init_file(dirs[i].content + j, name);
+          struct inode* inode = srsfs_get_inode(
+              idmap, parent_inode->i_sb, NULL, S_IFREG | S_IRWXUGO, dirs[i].content[j].id
+          );
+          inode->i_op = &srsfs_inode_ops;
+          inode->i_fop = &srsfs_file_ops;
+          d_add(child_dentry, inode);
+          return 0;
+        }
+      }
+    }
   }
-  return 0;
+  return -ENOMEM;
 }
 
 static int srsfs_unlink(struct inode* parent_inode, struct dentry* child_dentry) {
@@ -368,6 +389,7 @@ static int __init srsfs_init(void) {
   prepare_lists();
   rootdir = dirs;
   rootdir->state = USED;
+  rootdir->id = SRSFS_ROOT_ID;
   set_fs_params();
   register_filesystem(&srsfs_fs_type);
   LOG("SRSFS successfully registered\n");

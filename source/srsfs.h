@@ -35,6 +35,7 @@ struct srsfs_file {
 struct srsfs_dir {
   struct srsfs_file content[SRSFS_DIR_CAP];
   enum srsfs_fstate state;
+  int id;
 };
 
 struct srsfs_file* getfile(int ino);
