@@ -9,7 +9,7 @@ all:
 
 clean:
 	make -C $(KDIR) M=$(PWD) clean
-	rm -rf .cache
+	rm -rf .cache testtmp
 
 test: all
 	insmod source/srsfs.ko
