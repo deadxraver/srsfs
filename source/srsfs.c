@@ -10,6 +10,79 @@ static struct srsfs_dir* rootdir;
 static struct srsfs_dir dirs[100];
 static int fcnt = 0;
 
+static struct inode_operations srsfs_inode_ops = {
+    .lookup = srsfs_lookup,
+    .create = srsfs_create,
+    .unlink = srsfs_unlink,
+    .mkdir = srsfs_mkdir,
+    .rmdir = srsfs_rmdir,
+};
+
+struct file_operations srsfs_dir_ops = {
+    .iterate_shared = srsfs_iterate,
+};
+
+struct file_operations srsfs_file_ops = {
+    .read = srsfs_read,
+    .write = srsfs_write,
+};
+
+struct srsfs_file* getfile(int ino) {
+  for (size_t i = 0; i < 100; ++i) {
+    if (dirs[i].state == UNUSED)
+      continue;
+    for (size_t j = 0; j < SRSFS_DIR_CAP; ++j) {
+      if (dirs[i].content[j].state == UNUSED)
+        continue;
+      if (dirs[i].content[j].id == ino)
+        return dirs[i].content + j;
+    }
+  }
+  return NULL;
+}
+
+static ssize_t srsfs_read(struct file* filp, char* buffer, size_t len, loff_t* offset) {
+  struct inode* inode = filp->f_inode;
+  struct srsfs_file* f = getfile(inode->i_ino);
+  if (f == NULL)
+    return -ENOENT;
+  if (f->is_dir)
+    return -EISDIR;
+  char* data = f->data;
+  size_t sz = f->sz;
+  if (*offset >= sz)
+    return 0;
+  size_t to_read = len;
+  size_t available = sz - *offset;
+  if (to_read > available)
+    to_read = available;
+  if (copy_to_user(buffer, data + *offset, to_read))
+    return -EFAULT;
+  *offset += to_read;
+  return to_read;
+}
+
+static ssize_t srsfs_write(struct file* filp, const char* buffer, size_t len, loff_t* offset) {
+  struct inode* inode = filp->f_inode;
+  struct srsfs_file* f = getfile(inode->i_ino);
+  if (f == NULL)
+    return -ENOENT;
+  if (f->is_dir)
+    return -EISDIR;
+  char* data = f->data;
+  if (len == 0) {
+    f->sz = *offset;
+    return 0;
+  }
+  size_t available = SRSFS_FSIZE - *offset;
+  if (len > available)
+    return -ENOMEM;
+  if (copy_from_user(data + *offset, buffer, len))
+    return -EFAULT;
+  *offset += len;
+  return len;
+}
+
 static int srsfs_iterate(struct file* filp, struct dir_context* ctx) {
   struct dentry* dentry = filp->f_path.dentry;
   struct inode* inode = d_inode(dentry);
@@ -51,10 +124,6 @@ static int srsfs_iterate(struct file* filp, struct dir_context* ctx) {
   return 0;
 }
 
-struct file_operations srsfs_dir_ops = {
-    .iterate_shared = srsfs_iterate,
-};
-
 static void init_file(struct srsfs_file* file, const char* name) {
   if (file->state == USED)
     return;
@@ -63,6 +132,7 @@ static void init_file(struct srsfs_file* file, const char* name) {
   file->name[SRSFS_FILENAME_LEN - 1] = 0;
   file->is_dir = 0;
   file->id = SRSFS_ROOT_ID + ++fcnt;
+  file->sz = 0;
 }
 
 static void destroy_file(struct srsfs_file* file) {
@@ -104,10 +174,6 @@ static struct srsfs_dir* alloc_dir(void) {
   return NULL;
 }
 
-static void free_dir(struct srsfs_dir* dir) {
-  dir->state = UNUSED;
-}
-
 static bool is_empty(struct srsfs_dir* dir) {
   for (size_t i = 0; i < SRSFS_DIR_CAP; ++i) {
     if (dir->content[i].state == USED)
@@ -139,14 +205,6 @@ static struct dentry* srsfs_lookup(
   return NULL;
 }
 
-static struct inode_operations srsfs_inode_ops = {
-    .lookup = srsfs_lookup,
-    .create = srsfs_create,
-    .unlink = srsfs_unlink,
-    .mkdir = srsfs_mkdir,
-    .rmdir = srsfs_rmdir,
-};
-
 static int srsfs_create(
     struct mnt_idmap* idmap,
     struct inode* parent_inode,
@@ -168,7 +226,7 @@ static int srsfs_create(
             idmap, parent_inode->i_sb, NULL, S_IFREG | S_IRWXUGO, rootdir->content[i].id
         );
         inode->i_op = &srsfs_inode_ops;
-        inode->i_fop = NULL;
+        inode->i_fop = &srsfs_file_ops;
         d_add(child_dentry, inode);
         return 0;
       }
@@ -249,9 +307,12 @@ static struct inode* srsfs_get_inode(
     LOG("failed to create inode\n");
   else {
     inode_init_owner(idmap, inode, dir, mode);
+    if (S_ISDIR(mode))
+      inode->i_fop = &srsfs_dir_ops;
+    else
+      inode->i_fop = &srsfs_file_ops;
     inode->i_ino = i_ino;
     inode->i_op = &srsfs_inode_ops;
-    inode->i_fop = &srsfs_dir_ops;
   }
   return inode;
 }

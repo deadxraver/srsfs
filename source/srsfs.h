@@ -5,6 +5,7 @@
 #include <linux/init.h>
 #include <linux/mnt_idmapping.h>
 #include <linux/module.h>
+#include <linux/uaccess.h>
 
 #define LOG(fmt, ...) pr_info("[" MODULE_NAME "]: " fmt, ##__VA_ARGS__)
 
@@ -13,6 +14,7 @@
 #define SRSFS_ROOT_ID 1000
 #define SRSFS_FILENAME_LEN 16
 #define SRSFS_DIR_CAP 20
+#define SRSFS_FSIZE 1024
 
 enum srsfs_fstate {
   UNUSED,
@@ -26,12 +28,20 @@ struct srsfs_file {
   struct srsfs_dir* ptr;
   enum srsfs_fstate state;
   int id;
+  char data[SRSFS_FSIZE];
+  size_t sz;
 };
 
 struct srsfs_dir {
   struct srsfs_file content[SRSFS_DIR_CAP];
   enum srsfs_fstate state;
 };
+
+struct srsfs_file* getfile(int ino);
+
+static ssize_t srsfs_read(struct file* filp, char* buffer, size_t len, loff_t* offset);
+
+static ssize_t srsfs_write(struct file* filp, const char* buffer, size_t len, loff_t* offset);
 
 static void init_file(struct srsfs_file* file, const char* name);
 
@@ -42,8 +52,6 @@ static void init_dir(struct srsfs_dir* dir, const char* name, struct srsfs_file*
 static void destroy_dir(struct srsfs_dir* dir);
 
 static struct srsfs_dir* alloc_dir(void);
-
-static void free_dir(struct srsfs_dir* dir);
 
 static bool is_empty(struct srsfs_dir* dir);
 
