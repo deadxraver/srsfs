@@ -192,7 +192,7 @@ static int srsfs_unlink(struct inode* parent_inode, struct dentry* child_dentry)
 
 static int srsfs_mkdir(
     struct mnt_idmap* idmap, struct inode* parent_inode, struct dentry* child_dentry, umode_t mode
-) {
+) {  // BUG: mkdir seems to break vm...)
   const char* name = child_dentry->d_name.name;
   ino_t root = parent_inode->i_ino;
   if (root == SRSFS_ROOT_ID) {
