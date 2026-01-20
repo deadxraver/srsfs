@@ -16,6 +16,7 @@ static struct inode_operations srsfs_inode_ops = {
     .unlink = srsfs_unlink,
     .mkdir = srsfs_mkdir,
     .rmdir = srsfs_rmdir,
+    .link = srsfs_link,
 };
 
 struct file_operations srsfs_dir_ops = {
@@ -26,6 +27,13 @@ struct file_operations srsfs_file_ops = {
     .read = srsfs_read,
     .write = srsfs_write,
 };
+
+static int srsfs_link(
+    struct dentry* old_dentry, struct inode* parent_dir, struct dentry* new_dentry
+) {
+  // TODO:
+  return 0;
+}
 
 struct srsfs_file* getfile(int ino) {
   for (size_t i = 0; i < 100; ++i) {
@@ -48,8 +56,10 @@ static ssize_t srsfs_read(struct file* filp, char* buffer, size_t len, loff_t* o
     return -ENOENT;
   if (f->is_dir)
     return -EISDIR;
-  char* data = f->data;
-  size_t sz = f->sz;
+  if (f->sd == NULL)
+    return -EIO;
+  char* data = f->sd->data;
+  size_t sz = f->sd->sz;
   if (*offset >= sz)
     return 0;
   size_t to_read = len;
@@ -76,11 +86,13 @@ static ssize_t srsfs_write(struct file* filp, const char* buffer, size_t len, lo
 
   if (to_write == 0)
     return -ENOSPC;
-  char* data = f->data;
+  if (f->sd == NULL)
+    return -EIO;
+  char* data = f->sd->data;
   if (copy_from_user(data + *offset, buffer, len))
     return -EFAULT;
-  if (*offset + to_write > f->sz)
-    f->sz = *offset + to_write;
+  if (*offset + to_write > f->sd->sz)
+    f->sd->sz = *offset + to_write;
   *offset += to_write;
   return to_write;
 }
@@ -127,7 +139,7 @@ static int srsfs_iterate(struct file* filp, struct dir_context* ctx) {
   return -ENOENT;
 }
 
-static void init_file(struct srsfs_file* file, const char* name) {
+static void init_file(struct srsfs_file* file, const char* name, bool do_alloc) {
   if (file->state == USED)
     return;
   file->state = USED;
@@ -135,7 +147,12 @@ static void init_file(struct srsfs_file* file, const char* name) {
   file->name[SRSFS_FILENAME_LEN - 1] = 0;
   file->is_dir = 0;
   file->id = SRSFS_ROOT_ID + ++fcnt;
-  file->sz = 0;
+  if (do_alloc) {
+    file->sd = (struct shared_data*)kmalloc(sizeof(struct shared_data), GFP_KERNEL);
+    file->sd->refcount = 1;
+    file->sd->sz = 0;
+  } else
+    file->sd = NULL;
 }
 
 static void destroy_file(struct srsfs_file* file) {
@@ -147,11 +164,17 @@ static void destroy_file(struct srsfs_file* file) {
     destroy_dir(file->ptr);
   file->is_dir = 0;
   file->id = 0;
+  if (file->sd == NULL)
+    return;
+  --(file->sd->refcount);
+  if (file->sd->refcount == 0)
+    kfree(file->sd);
+  file->sd = NULL;
 }
 
 static void init_dir(struct srsfs_dir* dir, const char* name, struct srsfs_file* assoc_file) {
   if (assoc_file) {
-    init_file(assoc_file, name);
+    init_file(assoc_file, name, false);
     assoc_file->is_dir = 1;
     assoc_file->ptr = dir;
     dir->id = assoc_file->id;
@@ -230,7 +253,7 @@ static int srsfs_create(
       for (size_t j = 0; j < SRSFS_DIR_CAP; ++j) {
         if (dirs[i].content[j].state == USED)
           continue;
-        init_file(dirs[i].content + j, name);
+        init_file(dirs[i].content + j, name, 1);
         struct inode* inode = srsfs_get_inode(
             idmap, parent_inode->i_sb, NULL, S_IFREG | S_IRWXUGO, dirs[i].content[j].id
         );
@@ -365,6 +388,7 @@ static void prepare_lists(void) {
     dirs[i].state = UNUSED;
     for (int j = 0; j < SRSFS_DIR_CAP; ++j) {
       dirs[i].content[j].is_dir = 0;  // prevent from dereferencing garbage pointers
+      dirs[i].content[j].sd = NULL;   // prevent free on garbage pointer
       destroy_file(dirs[i].content + j);
     }
   }
@@ -385,6 +409,19 @@ static int __init srsfs_init(void) {
 static void __exit srsfs_exit(void) {
   unregister_filesystem(&srsfs_fs_type);
   LOG("SRSFS unregistered successfully\n");
+  int cnt = 0;
+  for (size_t i = 0; i < 100; ++i) {
+    if (dirs[i].state == UNUSED)
+      continue;
+    for (size_t j = 0; j < SRSFS_DIR_CAP; ++j) {
+      if (dirs[i].content[j].sd == NULL)
+        continue;
+      kfree(dirs[i].content[j].sd);
+      dirs[i].content[j].sd = NULL;
+      ++cnt;
+    }
+  }
+  LOG("Cleaned up %d regs\n", cnt);
   LOG("SRSFS left the kernel\n");
 }
 

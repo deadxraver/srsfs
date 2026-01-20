@@ -22,14 +22,19 @@ enum srsfs_fstate {
 };
 struct srsfs_dir;
 
+struct shared_data {
+  int refcount;
+  char data[SRSFS_FSIZE];
+  size_t sz;
+};
+
 struct srsfs_file {
   char name[SRSFS_FILENAME_LEN];
   bool is_dir;
   struct srsfs_dir* ptr;
   enum srsfs_fstate state;
   int id;
-  char data[SRSFS_FSIZE];
-  size_t sz;
+  struct shared_data* sd;
 };
 
 struct srsfs_dir {
@@ -38,13 +43,17 @@ struct srsfs_dir {
   int id;
 };
 
+static int srsfs_link(
+    struct dentry* old_dentry, struct inode* parent_dir, struct dentry* new_dentry
+);
+
 struct srsfs_file* getfile(int ino);
 
 static ssize_t srsfs_read(struct file* filp, char* buffer, size_t len, loff_t* offset);
 
 static ssize_t srsfs_write(struct file* filp, const char* buffer, size_t len, loff_t* offset);
 
-static void init_file(struct srsfs_file* file, const char* name);
+static void init_file(struct srsfs_file* file, const char* name, bool do_alloc);
 
 static void destroy_file(struct srsfs_file* file);
 
