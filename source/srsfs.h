@@ -29,7 +29,6 @@ struct srsfs_file {
 };
 
 struct srsfs_dir {
-  char name[SRSFS_FILENAME_LEN];
   struct srsfs_file content[SRSFS_DIR_CAP];
   enum srsfs_fstate state;
 };
@@ -38,11 +37,25 @@ static void init_file(struct srsfs_file* file, const char* name);
 
 static void destroy_file(struct srsfs_file* file);
 
+static void init_dir(struct srsfs_dir* dir, const char* name, struct srsfs_file* assoc_file);
+
+static void destroy_dir(struct srsfs_dir* dir);
+
+static struct srsfs_dir* alloc_dir(void);
+
+static void free_dir(struct srsfs_dir* dir);
+
+static bool is_empty(struct srsfs_dir* dir);
+
 static int srsfs_iterate(struct file* filp, struct dir_context* ctx);
 
 static int srsfs_create(struct mnt_idmap*, struct inode*, struct dentry*, umode_t, bool);
 
 static int srsfs_unlink(struct inode* parent_inode, struct dentry* child_dentry);
+
+static int srsfs_mkdir(struct mnt_idmap*, struct inode*, struct dentry*, umode_t);
+
+static int srsfs_rmdir(struct inode*, struct dentry*);
 
 static struct dentry* srsfs_lookup(
     struct inode* parent_inode, struct dentry* child_dentry, unsigned int flag

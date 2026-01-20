@@ -68,8 +68,50 @@ static void init_file(struct srsfs_file* file, const char* name) {
 static void destroy_file(struct srsfs_file* file) {
   file->state = UNUSED;
   memset(file->name, 0, SRSFS_FILENAME_LEN);
+  if (file->is_dir)
+    destroy_dir(file->ptr);
   file->is_dir = 0;
   file->id = 0;
+}
+
+static void init_dir(struct srsfs_dir* dir, const char* name, struct srsfs_file* assoc_file) {
+  if (assoc_file) {
+    init_file(assoc_file, name);
+    assoc_file->is_dir = 1;
+    assoc_file->ptr = dir;
+  }
+  dir->state = USED;
+  for (size_t i = 0; i < SRSFS_DIR_CAP; ++i) {
+    destroy_file(dir->content + i);
+  }
+}
+
+static void destroy_dir(struct srsfs_dir* dir) {
+  dir->state = UNUSED;
+  for (size_t i = 0; i < SRSFS_DIR_CAP; ++i) {
+    destroy_file(dir->content + i);
+  }
+}
+
+static struct srsfs_dir* alloc_dir(void) {
+  for (size_t i = 0; i < 100; ++i) {
+    if (dirs[i].state == UNUSED) {
+      return dirs + i;
+    }
+  }
+  return NULL;
+}
+
+static void free_dir(struct srsfs_dir* dir) {
+  dir->state = UNUSED;
+}
+
+static bool is_empty(struct srsfs_dir* dir) {
+  for (size_t i = 0; i < SRSFS_DIR_CAP; ++i) {
+    if (dir->content[i].state == USED)
+      return 0;
+  }
+  return 1;
 }
 
 static struct dentry* srsfs_lookup(
@@ -99,6 +141,8 @@ static struct inode_operations srsfs_inode_ops = {
     .lookup = srsfs_lookup,
     .create = srsfs_create,
     .unlink = srsfs_unlink,
+    .mkdir = srsfs_mkdir,
+    .rmdir = srsfs_rmdir,
 };
 
 static int srsfs_create(
@@ -137,6 +181,45 @@ static int srsfs_unlink(struct inode* parent_inode, struct dentry* child_dentry)
   if (root == SRSFS_ROOT_ID) {
     for (int i = 0; i < SRSFS_DIR_CAP; ++i) {
       if (strcmp(rootdir->content[i].name, name) == 0) {
+        destroy_file(rootdir->content + i);
+        return 0;
+      }
+    }
+    return -ENOENT;
+  }
+  return 0;
+}
+
+static int srsfs_mkdir(
+    struct mnt_idmap* idmap, struct inode* parent_inode, struct dentry* child_dentry, umode_t mode
+) {
+  const char* name = child_dentry->d_name.name;
+  ino_t root = parent_inode->i_ino;
+  if (root == SRSFS_ROOT_ID) {
+    for (size_t i = 0; i < SRSFS_DIR_CAP; ++i) {
+      if (rootdir->content[i].state == UNUSED) {
+        struct srsfs_dir* dir = alloc_dir();
+        if (dir == NULL)
+          return -ENOMEM;
+        init_dir(dir, name, rootdir->content + i);
+        return 0;
+      }
+    }
+    return -ENOMEM;
+  }
+  return 0;
+}
+
+static int srsfs_rmdir(struct inode* parent_inode, struct dentry* child_dentry) {
+  const char* name = child_dentry->d_name.name;
+  ino_t root = parent_inode->i_ino;
+  if (root == SRSFS_ROOT_ID) {
+    for (size_t i = 0; i < SRSFS_DIR_CAP; ++i) {
+      if (strcmp(name, rootdir->content[i].name) == 0) {
+        if (!rootdir->content[i].is_dir)
+          return 1;
+        if (!is_empty(rootdir->content[i].ptr))
+          return 1;
         destroy_file(rootdir->content + i);
         return 0;
       }
@@ -208,24 +291,10 @@ static void prepare_lists(void) {
   }
 }
 
-static void insert_test_data(void) {
-  dirs[0].state = USED;
-  strcpy(rootdir->name, "srsroot");
-  init_file(rootdir->content, "file.txt");
-  rootdir->content[1].state = USED;
-  strcpy(rootdir->content[1].name, "dir");
-  rootdir->content[1].is_dir = 1;
-  rootdir->content[1].ptr = dirs + 1;
-  dirs[1].state = USED;
-  strcpy(dirs[1].name, "dir");
-  rootdir->content[1].id = SRSFS_ROOT_ID + ++fcnt;
-}
-
 static int __init srsfs_init(void) {
   LOG("SRSFS joined the kernel\n");
   prepare_lists();
   rootdir = dirs;
-  insert_test_data();
   set_fs_params();
   register_filesystem(&srsfs_fs_type);
   LOG("SRSFS successfully registered\n");
