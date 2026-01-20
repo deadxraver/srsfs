@@ -6,6 +6,7 @@
 #include <linux/mnt_idmapping.h>
 #include <linux/module.h>
 #include <linux/uaccess.h>
+#include <linux/vmalloc.h>
 
 #define LOG(fmt, ...) pr_info("[" MODULE_NAME "]: " fmt, ##__VA_ARGS__)
 
