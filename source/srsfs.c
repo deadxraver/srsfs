@@ -66,6 +66,8 @@ static void init_file(struct srsfs_file* file, const char* name) {
 }
 
 static void destroy_file(struct srsfs_file* file) {
+  if (file->state == UNUSED)
+    return;
   file->state = UNUSED;
   memset(file->name, 0, SRSFS_FILENAME_LEN);
   if (file->is_dir)
@@ -82,7 +84,7 @@ static void init_dir(struct srsfs_dir* dir, const char* name, struct srsfs_file*
   }
   dir->state = USED;
   for (size_t i = 0; i < SRSFS_DIR_CAP; ++i) {
-    destroy_file(dir->content + i);
+    dir->content[i].state = UNUSED;
   }
 }
 
@@ -192,7 +194,7 @@ static int srsfs_unlink(struct inode* parent_inode, struct dentry* child_dentry)
 
 static int srsfs_mkdir(
     struct mnt_idmap* idmap, struct inode* parent_inode, struct dentry* child_dentry, umode_t mode
-) {  // BUG: mkdir seems to break vm...)
+) {
   const char* name = child_dentry->d_name.name;
   ino_t root = parent_inode->i_ino;
   if (root == SRSFS_ROOT_ID) {
@@ -286,6 +288,7 @@ static void prepare_lists(void) {
   for (int i = 0; i < 100; ++i) {
     dirs[i].state = UNUSED;
     for (int j = 0; j < SRSFS_DIR_CAP; ++j) {
+      dirs[i].content[j].is_dir = 0;  // prevent from dereferencing garbage pointers
       destroy_file(dirs[i].content + j);
     }
   }
