@@ -69,18 +69,20 @@ static ssize_t srsfs_write(struct file* filp, const char* buffer, size_t len, lo
     return -ENOENT;
   if (f->is_dir)
     return -EISDIR;
-  char* data = f->data;
-  if (len == 0) {
-    f->sz = *offset;
-    return 0;
-  }
+  if (*offset > SRSFS_FSIZE)
+    return -EFBIG;
   size_t available = SRSFS_FSIZE - *offset;
-  if (len > available)
-    return -ENOMEM;
+  size_t to_write = min(len, available);
+
+  if (to_write == 0)
+    return -ENOSPC;
+  char* data = f->data;
   if (copy_from_user(data + *offset, buffer, len))
     return -EFAULT;
-  *offset += len;
-  return len;
+  if (*offset + to_write > f->sz)
+    f->sz = *offset + to_write;
+  *offset += to_write;
+  return to_write;
 }
 
 static int srsfs_iterate(struct file* filp, struct dir_context* ctx) {
