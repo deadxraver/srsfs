@@ -204,6 +204,12 @@ static int srsfs_mkdir(
         if (dir == NULL)
           return -ENOMEM;
         init_dir(dir, name, rootdir->content + i);
+        struct inode* inode = srsfs_get_inode(
+            idmap, parent_inode->i_sb, NULL, S_IFDIR | S_IRWXUGO, rootdir->content[i].id
+        );
+        inode->i_op = &srsfs_inode_ops;
+        inode->i_fop = &srsfs_dir_ops;
+        d_add(child_dentry, inode);
         return 0;
       }
     }
@@ -298,6 +304,7 @@ static int __init srsfs_init(void) {
   LOG("SRSFS joined the kernel\n");
   prepare_lists();
   rootdir = dirs;
+  rootdir->state = USED;
   set_fs_params();
   register_filesystem(&srsfs_fs_type);
   LOG("SRSFS successfully registered\n");
