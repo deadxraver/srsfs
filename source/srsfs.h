@@ -26,6 +26,7 @@ struct shared_data {
   int refcount;
   char data[SRSFS_FSIZE];
   size_t sz;
+  struct shared_data* next;
 };
 
 struct srsfs_file {
@@ -42,6 +43,8 @@ struct srsfs_dir {
   enum srsfs_fstate state;
   int id;
 };
+
+static void free_shared(struct shared_data*, bool);
 
 static int srsfs_link(
     struct dentry* old_dentry, struct inode* parent_dir, struct dentry* new_dentry
