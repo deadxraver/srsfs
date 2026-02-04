@@ -4,6 +4,9 @@ PWD := $(CURDIR)
 KDIR = /lib/modules/`uname -r`/build
 EXTRA_CFLAGS = -Wall -g
 
+BLK_SZ=16k
+BLK_CNT=160
+
 all:
 	make -C $(KDIR) M=$(PWD) modules
 
@@ -16,19 +19,16 @@ test: all
 	mkdir -p /mnt/srsfs/
 	mkdir -p testtmp/
 	mount -t srsfs todo /mnt/srsfs/
-	cat /dev/random | dd count=5 > /mnt/srsfs/f
-	cp /mnt/srsfs/f testtmp/f
+	dd if=/dev/random count=$(BLK_CNT) bs=$(BLK_SZ) of=/mnt/srsfs/f
+	dd if=/mnt/srsfs/f count=$(BLK_CNT) bs=$(BLK_SZ) of=testtmp/f
 	test "$$(diff testtmp/f /mnt/srsfs/f)" = ""
-	cat /dev/random | dd count=10 > testtmp/ff
-	cp testtmp/ff /mnt/srsfs/
-	test "$$(diff testtmp/ff /mnt/srsfs/ff)" = ""
-	@echo 'cp tests OK'
-	ln /mnt/srsfs/ff /mnt/srsfs/lnff
-	test "$$(diff /mnt/srsfs/ff /mnt/srsfs/lnff)" = ""
-	@echo 'ln tests OK'
+	@echo '==== dd tests OK ===='
+	ln /mnt/srsfs/f /mnt/srsfs/lnf
+	test "$$(diff /mnt/srsfs/f /mnt/srsfs/lnf)" = ""
+	@echo '==== ln tests OK ===='
 	umount /mnt/srsfs
 	mount -t srsfs todo /mnt/srsfs
 	test "$$(diff testtmp/f /mnt/srsfs/f)" = ""
-	@echo 'umount mount OK'
+	@echo '==== umount mount OK ===='
 	umount /mnt/srsfs
 	rmmod srsfs
