@@ -32,7 +32,7 @@ static void free_shared(struct shared_data* node, bool force) {
   if (node == NULL || (--(node->refcount) > 0 && !force))
     return;
   free_shared(node->next, 1);
-  vfree(node);
+  kvfree(node);
 }
 
 static int srsfs_link(
@@ -129,7 +129,7 @@ static ssize_t srsfs_write(struct file* filp, const char* buffer, size_t len, lo
     return -EISDIR;
 
   if (f->sd == NULL) {
-    f->sd = vmalloc(sizeof(struct shared_data));
+    f->sd = kvmalloc(sizeof(struct shared_data), GFP_KERNEL);
     if (!f->sd)
       return -ENOMEM;
     f->sd->refcount = 1;
@@ -141,7 +141,7 @@ static ssize_t srsfs_write(struct file* filp, const char* buffer, size_t len, lo
   while (local_offset >= SRSFS_FSIZE) {
     local_offset -= SRSFS_FSIZE;
     if (sd->next == NULL) {
-      sd->next = vmalloc(sizeof(struct shared_data));
+      sd->next = kvmalloc(sizeof(struct shared_data), GFP_KERNEL);
       if (!sd->next)
         return -ENOMEM;
       sd->next->refcount = 1;
@@ -163,7 +163,7 @@ static ssize_t srsfs_write(struct file* filp, const char* buffer, size_t len, lo
     local_offset = 0;
     if (total_written < len) {
       if (sd->next == NULL) {
-        sd->next = vmalloc(sizeof(struct shared_data));
+        sd->next = kvmalloc(sizeof(struct shared_data), GFP_KERNEL);
         if (sd->next == NULL)
           return -ENOMEM;
         sd->next->refcount = 1;
@@ -229,7 +229,7 @@ static void init_file(struct srsfs_file* file, const char* name, bool do_alloc) 
   file->is_dir = 0;
   file->id = SRSFS_ROOT_ID + ++fcnt;
   if (do_alloc) {
-    file->sd = (struct shared_data*)vmalloc(sizeof(struct shared_data));
+    file->sd = (struct shared_data*)kvmalloc(sizeof(struct shared_data), GFP_KERNEL);
     file->sd->refcount = 1;
     file->sd->sz = 0;
     file->sd->next = NULL;
