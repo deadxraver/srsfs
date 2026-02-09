@@ -1,9 +1,9 @@
 #include "srsfs_futil.h"
 
-#include "flist.h"
-
 #include <linux/mm.h>
 #include <linux/stddef.h>
+
+#include "flist.h"
 
 #define LOG(fmt, ...) pr_info("[srsfs_futil]: " fmt, ##__VA_ARGS__)
 
@@ -22,8 +22,8 @@ void init_file(struct srsfs_file* file, const char* name, int id, bool do_alloc)
 }
 
 void destroy_file(struct srsfs_file* file) {
-    if (file == NULL)
-        return;
+  if (file == NULL)
+    return;
   kvfree(file->name);
   file->name = NULL;
   file->id = 0;
@@ -43,12 +43,12 @@ void init_dir(struct srsfs_file* dir, const char* name, int id) {
   dir->is_dir = 1;
 }
 
-void destroy_dir(struct srsfs_file* dir) { // NOTE: dir itself is not freed
-    if (dir == NULL)
-        return ;
+void destroy_dir(struct srsfs_file* dir) {  // NOTE: dir itself is not freed
+  if (dir == NULL)
+    return;
   while (dir->dir_content) {
-      struct srsfs_file* head_file = flist_get(dir->dir_content, 0);
-      LOG("destroy_dir: struct srsfs_file* head_file = 0x%lx", head_file);
+    struct srsfs_file* head_file = flist_get(dir->dir_content, 0);
+    LOG("destroy_dir: struct srsfs_file* head_file = 0x%lx", head_file);
     dir->dir_content = flist_remove(dir->dir_content, head_file);
     destroy_file(head_file);
     kvfree(head_file);

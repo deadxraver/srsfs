@@ -16,4 +16,4 @@ bool is_empty(struct srsfs_file* dir);
 
 void free_shared(struct shared_data*, bool);
 
-#endif // !_SRSFS_FUTIL_H
+#endif  // !_SRSFS_FUTIL_H

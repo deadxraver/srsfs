@@ -367,11 +367,7 @@ static void set_fs_params(void) {
 }
 
 static void prepare_lists(void) {
-  rootdir.name = "srsfs";
-  rootdir.id = ALLOC_ID();
-  rootdir.parent_dir = NULL;
-  rootdir.is_dir = true;
-  rootdir.dir_content = NULL;  // empty on create
+  init_dir(&rootdir, "srsfs", ALLOC_ID());
 }
 
 static void test_data(void) {
