@@ -1,6 +1,7 @@
 #include "srsfs.h"
 
 #include "flist.h"
+#include "srsfs_futil.h"
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("deadxraver");
@@ -30,13 +31,6 @@ struct file_operations srsfs_file_ops = {
     .read = srsfs_read,
     .write = srsfs_write,
 };
-
-static void free_shared(struct shared_data* node, bool force) {
-  if (node == NULL || (--(node->refcount) > 0 && !force))
-    return;
-  free_shared(node->next, 1);
-  kvfree(node);
-}
 
 static int srsfs_link(
     struct dentry* old_dentry, struct inode* parent_dir, struct dentry* new_dentry
@@ -203,49 +197,6 @@ static int srsfs_iterate(struct file* filp, struct dir_context* ctx) {
   }
 
   return -ENOENT;
-}
-
-static void init_file(struct srsfs_file* file, const char* name, bool do_alloc) {
-  file->name = (char*)kvmalloc(strlen(name) + 1, GFP_KERNEL);
-  strcpy(file->name, name);
-  file->is_dir = 0;
-  file->id = ALLOC_ID();
-  if (do_alloc) {
-    file->data = (struct shared_data*)kvmalloc(sizeof(struct shared_data), GFP_KERNEL);
-    file->data->refcount = 1;
-    file->data->sz = 0;
-    file->data->next = NULL;
-  } else
-    file->data = NULL;
-}
-
-static void destroy_file(struct srsfs_file* file) {
-  kvfree(file->name);
-  file->name = NULL;
-  file->id = 0;
-  if (file->is_dir)
-    destroy_dir(file);
-  else {
-    file->is_dir = 0;
-    if (file->data == NULL)
-      return;
-    free_shared(file->data, 0);
-    file->data = NULL;
-  }
-}
-
-static void init_dir(struct srsfs_file* dir, const char* name) {
-  init_file(dir, name, false);
-  dir->is_dir = 1;
-}
-
-static void destroy_dir(struct srsfs_file* dir) {
-  while (dir->dir_content)  // TODO: get parent dir
-    dir->dir_content = flist_remove(NULL, dir->dir_content->content);
-}
-
-static bool is_empty(struct srsfs_file* dir) {
-  return dir && dir->is_dir && dir->dir_content == NULL;
 }
 
 static struct dentry* srsfs_lookup(
@@ -426,7 +377,7 @@ static void prepare_lists(void) {
 static void test_data(void) {
   struct srsfs_file* f;
   f = (struct srsfs_file*)kvmalloc(sizeof(*f), GFP_KERNEL);
-  init_file(f, "test", 0);
+  init_file(f, "test", ALLOC_ID(), 0);
   rootdir.dir_content = flist_push(rootdir.dir_content, f);
   //
 }
@@ -444,7 +395,7 @@ static int __init srsfs_init(void) {
 static void __exit srsfs_exit(void) {
   unregister_filesystem(&srsfs_fs_type);
   LOG("SRSFS unregistered successfully\n");
-  // TODO: cleanup
+  destroy_dir(&rootdir);
   LOG("SRSFS left the kernel\n");
 }
 

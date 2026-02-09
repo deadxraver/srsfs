@@ -5,6 +5,8 @@
 #define SRSFS_ROOT_ID 1000
 #define SRSFS_FSIZE 1024  // 1KB
 
+#define LOG(fmt, ...) pr_info("[flist]: " fmt, ##__VA_ARGS__)
+
 struct flist* flist_push(struct flist* head, struct srsfs_file* file) {
   if (head == NULL) {
     head = (struct flist*)kvmalloc(sizeof(*head), GFP_KERNEL);
@@ -28,6 +30,7 @@ struct flist* flist_remove(struct flist* head, struct srsfs_file* file) {
     head->next->prev = head->prev;
     head->prev->next = head->next;
     struct flist* new_head = head->next;
+    LOG("flist_remove: struct flist* head = 0x%lx", head);
     // NOTE: file should be (kv)freed outside
     kvfree(head);
     return new_head;
@@ -37,6 +40,7 @@ struct flist* flist_remove(struct flist* head, struct srsfs_file* file) {
       node->prev->next = node->next;
       node->next->prev = node->prev;
       head = node->prev;
+      LOG("flist_remove: struct flist* node = 0x%lx", node);
       // NOTE: free
       kvfree(node);
       return head;

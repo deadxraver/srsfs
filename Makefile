@@ -1,6 +1,6 @@
 obj-m += srsfs.o
 
-srsfs-objs := source/srsfs.o source/flist.o
+srsfs-objs := source/srsfs.o source/flist.o source/srsfs_futil.o
 
 PWD := $(CURDIR)
 KDIR = /lib/modules/`uname -r`/build

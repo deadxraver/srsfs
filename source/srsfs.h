@@ -16,8 +16,6 @@
 
 #define MODULE_NAME "srsfs"
 
-static void free_shared(struct shared_data*, bool);
-
 static int srsfs_link(
     struct dentry* old_dentry, struct inode* parent_dir, struct dentry* new_dentry
 );
@@ -25,16 +23,6 @@ static int srsfs_link(
 static ssize_t srsfs_read(struct file* filp, char* buffer, size_t len, loff_t* offset);
 
 static ssize_t srsfs_write(struct file* filp, const char* buffer, size_t len, loff_t* offset);
-
-static void init_file(struct srsfs_file* file, const char* name, bool do_alloc);
-
-static void destroy_file(struct srsfs_file* file);
-
-static void init_dir(struct srsfs_file* dir, const char* name);
-
-static void destroy_dir(struct srsfs_file* dir);
-
-static bool is_empty(struct srsfs_file* dir);
 
 static int srsfs_iterate(struct file* filp, struct dir_context* ctx);
 
