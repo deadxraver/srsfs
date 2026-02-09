@@ -11,6 +11,8 @@ static struct file_system_type srsfs_fs_type;
 static struct srsfs_file rootdir;
 static int fcnt = 0;
 
+#define ALLOC_ID() (SRSFS_ROOT_ID + fcnt++)
+
 static struct inode_operations srsfs_inode_ops = {
     .lookup = srsfs_lookup,
     .create = srsfs_create,
@@ -41,7 +43,7 @@ static int srsfs_link(
 ) {
   const char* name = new_dentry->d_name.name;
   struct inode* old_inode = d_inode(old_dentry);
-  struct srsfs_file* old_file = getfile(old_inode->i_ino);
+  struct srsfs_file* old_file = NULL;  // getfile(old_inode->i_ino);
   if (S_ISDIR(old_inode->i_mode))
     return -EPERM;
   ino_t root = parent_dir->i_ino;
@@ -72,23 +74,9 @@ static int srsfs_link(
   return -ENOSPC;
 }
 
-struct srsfs_file* getfile(int ino) {
-  // for (size_t i = 0; i < 100; ++i) {
-  //   if (dirs[i].state == UNUSED)
-  //     continue;
-  //   for (size_t j = 0; j < SRSFS_DIR_CAP; ++j) {
-  //     if (dirs[i].content[j].state == UNUSED)
-  //       continue;
-  //     if (dirs[i].content[j].id == ino)
-  //       return dirs[i].content + j;
-  //   }
-  // }
-  return NULL;
-}
-
 static ssize_t srsfs_read(struct file* filp, char* buffer, size_t len, loff_t* offset) {
   struct inode* inode = filp->f_inode;
-  struct srsfs_file* f = getfile(inode->i_ino);
+  struct srsfs_file* f = NULL;  // getfile(inode->i_ino);
   if (f == NULL)
     return -ENOENT;
   if (f->is_dir)
@@ -123,7 +111,7 @@ static ssize_t srsfs_read(struct file* filp, char* buffer, size_t len, loff_t* o
 
 static ssize_t srsfs_write(struct file* filp, const char* buffer, size_t len, loff_t* offset) {
   struct inode* inode = filp->f_inode;
-  struct srsfs_file* f = getfile(inode->i_ino);
+  struct srsfs_file* f = NULL;  // getfile(inode->i_ino);
   if (f == NULL)
     return -ENOENT;
   if (f->is_dir)
@@ -200,33 +188,28 @@ static int srsfs_iterate(struct file* filp, struct dir_context* ctx) {
     ctx->pos++;
   }
 
-  // for (size_t i = 0; i < 100; ++i) {
-  //   if (dirs[i].state == UNUSED || dirs[i].id != ino)
-  //     continue;
-  //   for (size_t j = ctx->pos - 2; j < SRSFS_DIR_CAP; ++j) {
-  //     if (dirs[i].content[j].state == UNUSED)
-  //       continue;
-  //     if (!dir_emit(
-  //             ctx,
-  //             dirs[i].content[j].name,
-  //             strlen(dirs[i].content[j].name),
-  //             dirs[i].content[j].id,
-  //             (dirs[i].content[j].is_dir ? DT_DIR : DT_REG)
-  //         ))
-  //       return 0;
-  //     ctx->pos++;
-  //   }
-  // }
+  LOG("srsfs_iterate: struct srsfs_inode* i = 0x%lx", parent_inode);
+  LOG("srsfs_iterate: struct srsfs_inode_info* ii = 0x%lx", SRSFS_I(parent_inode));
+  if (parent_inode == NULL)
+    return 0;
+  struct flist* list = SRSFS_I(parent_inode)->dir_content;
+  for (int i = ctx->pos - 2;; ++i) {
+    struct srsfs_file* f = flist_get(list, i);
+    if (f == NULL)
+      return 0;
+    if (!dir_emit(ctx, f->name, strlen(f->name), f->id, f->is_dir ? DT_DIR : DT_REG))
+      return 0;
+    ctx->pos++;
+  }
 
   return -ENOENT;
 }
 
 static void init_file(struct srsfs_file* file, const char* name, bool do_alloc) {
-  // strncpy(file->name, name, SRSFS_FILENAME_LEN);
-  // TODO: /\/\/\/\ what to do
-  // file->name[SRSFS_FILENAME_LEN - 1] = 0;
+  file->name = (char*)kvmalloc(strlen(name) + 1, GFP_KERNEL);
+  strcpy(file->name, name);
   file->is_dir = 0;
-  file->id = SRSFS_ROOT_ID + ++fcnt;
+  file->id = ALLOC_ID();
   if (do_alloc) {
     file->data = (struct shared_data*)kvmalloc(sizeof(struct shared_data), GFP_KERNEL);
     file->data->refcount = 1;
@@ -237,8 +220,8 @@ static void init_file(struct srsfs_file* file, const char* name, bool do_alloc) 
 }
 
 static void destroy_file(struct srsfs_file* file) {
-  // memset(file->name, 0, SRSFS_FILENAME_LEN);
-  // ??
+  kvfree(file->name);
+  file->name = NULL;
   file->id = 0;
   if (file->is_dir)
     destroy_dir(file);
@@ -261,13 +244,6 @@ static void destroy_dir(struct srsfs_file* dir) {
     dir->dir_content = flist_remove(NULL, dir->dir_content->content);
 }
 
-static struct srsfs_file* alloc_dir(void) {
-  struct srsfs_file* dir;
-  dir = (struct srsfs_file*)kvmalloc(sizeof(*dir), GFP_KERNEL);
-  init_dir(dir, NULL);
-  return dir;
-}
-
 static bool is_empty(struct srsfs_file* dir) {
   return dir && dir->is_dir && dir->dir_content == NULL;
 }
@@ -275,28 +251,18 @@ static bool is_empty(struct srsfs_file* dir) {
 static struct dentry* srsfs_lookup(
     struct inode* parent_inode, struct dentry* child_dentry, unsigned int flag
 ) {
-  ino_t root = parent_inode->i_ino;
+  struct srsfs_inode_info* ii = SRSFS_I(parent_inode);
+  struct flist* list = ii->dir_content;
   const char* name = child_dentry->d_name.name;
-  // TODO: get parent_dir by parent_inode
-  // for (size_t i = 0; i < 100; ++i) {
-  //   if (dirs[i].state == UNUSED || dirs[i].id != root)
-  //     continue;
-  //   for (size_t j = 0; j < SRSFS_DIR_CAP; ++j) {
-  //     if (dirs[i].content[j].state == UNUSED)
-  //       continue;
-  //     if (strcmp(dirs[i].content[j].name, name))
-  //       continue;
-  //     struct inode* inode = srsfs_get_inode(
-  //         &nop_mnt_idmap,
-  //         parent_inode->i_sb,
-  //         NULL,
-  //         dirs[i].content[j].is_dir ? S_IFDIR : S_IFREG,
-  //         dirs[i].content[j].id
-  //     );
-  //     d_add(child_dentry, inode);
-  //     return NULL;
-  //   }
-  // }
+  int i = 0;
+  struct srsfs_file* f = flist_get(list, i);
+  for (; f; f = flist_get(list, ++i)) {
+    if (strcmp(f->name, name))
+      continue;
+    struct inode* inode = srsfs_get_inode(parent_inode->i_sb, parent_inode, f);
+    d_add(child_dentry, inode);
+    return NULL;
+  }
   return NULL;
 }
 
@@ -395,30 +361,29 @@ static int srsfs_rmdir(struct inode* parent_inode, struct dentry* child_dentry) 
 }
 
 static struct inode* srsfs_get_inode(
-    struct mnt_idmap* idmap,
-    struct super_block* sb,
-    const struct inode* dir,
-    umode_t mode,
-    int i_ino
+    struct super_block* sb, struct inode* parent, struct srsfs_file* file
 ) {
   struct inode* inode = new_inode(sb);
   if (inode == NULL)
     LOG("failed to create inode\n");
   else {
-    inode_init_owner(idmap, inode, dir, mode);
-    if (S_ISDIR(mode))
+    inode_init_owner(&nop_mnt_idmap, inode, parent, (file->is_dir ? S_IFDIR : S_IFREG) | S_IRWXUGO);
+    if (file->is_dir)
       inode->i_fop = &srsfs_dir_ops;
     else
       inode->i_fop = &srsfs_file_ops;
-    inode->i_ino = i_ino;
+    inode->i_ino = file->id;
     inode->i_op = &srsfs_inode_ops;
+    struct srsfs_inode_info* ii = SRSFS_I(inode);
+    ii->id = file->id;
+    ii->is_dir = file->is_dir;
+    ii->data = file->data;
   }
   return inode;
 }
 
 static int srsfs_fill_super(struct super_block* sb, void* data, int silent) {
-  struct mnt_idmap* idmap = &nop_mnt_idmap;
-  struct inode* inode = srsfs_get_inode(idmap, sb, NULL, S_IFDIR, SRSFS_ROOT_ID);
+  struct inode* inode = srsfs_get_inode(sb, NULL, &rootdir);
 
   sb->s_root = d_make_root(inode);
   if (sb->s_root == NULL) {
@@ -452,16 +417,25 @@ static void set_fs_params(void) {
 
 static void prepare_lists(void) {
   rootdir.name = "srsfs";
-  rootdir.id = SRSFS_ROOT_ID + fcnt++;
+  rootdir.id = ALLOC_ID();
   rootdir.parent_dir = NULL;
   rootdir.is_dir = true;
   rootdir.dir_content = NULL;  // empty on create
+}
+
+static void test_data(void) {
+  struct srsfs_file* f;
+  f = (struct srsfs_file*)kvmalloc(sizeof(*f), GFP_KERNEL);
+  init_file(f, "test", 0);
+  rootdir.dir_content = flist_push(rootdir.dir_content, f);
+  //
 }
 
 static int __init srsfs_init(void) {
   LOG("SRSFS joined the kernel\n");
   prepare_lists();
   set_fs_params();
+  test_data();
   register_filesystem(&srsfs_fs_type);
   LOG("SRSFS successfully registered\n");
   return 0;
@@ -470,13 +444,6 @@ static int __init srsfs_init(void) {
 static void __exit srsfs_exit(void) {
   unregister_filesystem(&srsfs_fs_type);
   LOG("SRSFS unregistered successfully\n");
-  // for (size_t i = 0; i < 100; ++i) {
-  //   if (dirs[i].state == UNUSED)
-  //     continue;
-  //   for (size_t j = 0; j < SRSFS_DIR_CAP; ++j) {
-  //     destroy_file(dirs[i].content + j);
-  //   }
-  // }
   // TODO: cleanup
   LOG("SRSFS left the kernel\n");
 }

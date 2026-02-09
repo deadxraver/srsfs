@@ -12,6 +12,8 @@
 
 #define LOG(fmt, ...) pr_info("[" MODULE_NAME "]: " fmt, ##__VA_ARGS__)
 
+#define SRSFS_I(inode) container_of(inode, struct srsfs_inode_info, vfs_inode)
+
 #define MODULE_NAME "srsfs"
 
 static void free_shared(struct shared_data*, bool);
@@ -19,8 +21,6 @@ static void free_shared(struct shared_data*, bool);
 static int srsfs_link(
     struct dentry* old_dentry, struct inode* parent_dir, struct dentry* new_dentry
 );
-
-static struct srsfs_file* getfile(int ino);
 
 static ssize_t srsfs_read(struct file* filp, char* buffer, size_t len, loff_t* offset);
 
@@ -33,8 +33,6 @@ static void destroy_file(struct srsfs_file* file);
 static void init_dir(struct srsfs_file* dir, const char* name);
 
 static void destroy_dir(struct srsfs_file* dir);
-
-static struct srsfs_file* alloc_dir(void);
 
 static bool is_empty(struct srsfs_file* dir);
 
@@ -52,9 +50,7 @@ static struct dentry* srsfs_lookup(
     struct inode* parent_inode, struct dentry* child_dentry, unsigned int flag
 );
 
-static struct inode* srsfs_get_inode(
-    struct mnt_idmap*, struct super_block*, const struct inode*, umode_t, int
-);
+static struct inode* srsfs_get_inode(struct super_block*, struct inode*, struct srsfs_file*);
 
 static int srsfs_fill_super(struct super_block* sb, void* data, int silent);
 

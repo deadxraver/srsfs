@@ -2,6 +2,7 @@
 
 #define _SRSFS_DS_H
 
+#include <linux/fs.h>
 #include <linux/types.h>
 
 #define SRSFS_ROOT_ID 1000
@@ -13,6 +14,16 @@ struct shared_data {  // NOTE: in future versions might be only one node, being 
   char data[SRSFS_FSIZE];  // <--
   size_t sz;
   struct shared_data* next;
+};
+
+struct srsfs_inode_info {
+  struct inode vfs_inode;
+  int id;
+  bool is_dir;
+  union {
+    struct flist* dir_content;
+    struct shared_data* data;
+  };
 };
 
 struct srsfs_file {
