@@ -1,13 +1,14 @@
 #include "srsfs.h"
 
+#include "flist.h"
+
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("deadxraver");
 MODULE_DESCRIPTION("A simple FS kernel module");
 
 static struct file_system_type srsfs_fs_type;
 
-static struct srsfs_dir* rootdir;
-static struct srsfs_dir dirs[100];
+static struct srsfs_file rootdir;
 static int fcnt = 0;
 
 static struct inode_operations srsfs_inode_ops = {
@@ -44,44 +45,44 @@ static int srsfs_link(
   if (S_ISDIR(old_inode->i_mode))
     return -EPERM;
   ino_t root = parent_dir->i_ino;
-  struct srsfs_dir* rdir = root == SRSFS_ROOT_ID ? rootdir : getfile(root)->ptr;
-  for (size_t i = 0; i < SRSFS_DIR_CAP; ++i) {
-    if (rdir->content[i].state == UNUSED)
-      continue;
-    if (strcmp(name, rdir->content[i].name) == 0)
-      return -EEXIST;
-  }
-  for (size_t i = 0; i < SRSFS_DIR_CAP; ++i) {
-    if (rdir->content[i].state == USED)
-      continue;
-    init_file(rdir->content + i, name, 0);
-    strncpy(rdir->content[i].name, name, SRSFS_FILENAME_LEN);
-    rdir->content[i].name[SRSFS_FILENAME_LEN - 1] = 0;
-    rdir->content[i].sd = old_file->sd;
-    rdir->content[i].id = old_file->id;
-    ++(old_file->sd->refcount);
-    struct inode* new_inode = srsfs_get_inode(
-        &nop_mnt_idmap, parent_dir->i_sb, parent_dir, old_inode->i_mode, old_inode->i_ino
-    );
-    set_nlink(new_inode, rdir->content[i].sd->refcount);
-    set_nlink(old_inode, rdir->content[i].sd->refcount);
-    d_instantiate(new_dentry, new_inode);
-    return 0;
-  }
+  // struct srsfs_file* rdir = root == SRSFS_ROOT_ID ? rootdir : getfile(root)->ptr;
+  // for (size_t i = 0; i < SRSFS_DIR_CAP; ++i) {
+  //   if (rdir->content[i].state == UNUSED)
+  //     continue;
+  //   if (strcmp(name, rdir->content[i].name) == 0)
+  //     return -EEXIST;
+  // }
+  // for (size_t i = 0; i < SRSFS_DIR_CAP; ++i) {
+  //   if (rdir->content[i].state == USED)
+  //     continue;
+  //   init_file(rdir->content + i, name, 0);
+  //   strncpy(rdir->content[i].name, name, SRSFS_FILENAME_LEN);
+  //   rdir->content[i].name[SRSFS_FILENAME_LEN - 1] = 0;
+  //   rdir->content[i].sd = old_file->data;
+  //   rdir->content[i].id = old_file->id;
+  //   ++(old_file->data->refcount);
+  //   struct inode* new_inode = srsfs_get_inode(
+  //       &nop_mnt_idmap, parent_dir->i_sb, parent_dir, old_inode->i_mode, old_inode->i_ino
+  //   );
+  //   set_nlink(new_inode, rdir->content[i].sd->refcount);
+  //   set_nlink(old_inode, rdir->content[i].sd->refcount);
+  //   d_instantiate(new_dentry, new_inode);
+  //   return 0;
+  // }
   return -ENOSPC;
 }
 
 struct srsfs_file* getfile(int ino) {
-  for (size_t i = 0; i < 100; ++i) {
-    if (dirs[i].state == UNUSED)
-      continue;
-    for (size_t j = 0; j < SRSFS_DIR_CAP; ++j) {
-      if (dirs[i].content[j].state == UNUSED)
-        continue;
-      if (dirs[i].content[j].id == ino)
-        return dirs[i].content + j;
-    }
-  }
+  // for (size_t i = 0; i < 100; ++i) {
+  //   if (dirs[i].state == UNUSED)
+  //     continue;
+  //   for (size_t j = 0; j < SRSFS_DIR_CAP; ++j) {
+  //     if (dirs[i].content[j].state == UNUSED)
+  //       continue;
+  //     if (dirs[i].content[j].id == ino)
+  //       return dirs[i].content + j;
+  //   }
+  // }
   return NULL;
 }
 
@@ -92,9 +93,9 @@ static ssize_t srsfs_read(struct file* filp, char* buffer, size_t len, loff_t* o
     return -ENOENT;
   if (f->is_dir)
     return -EISDIR;
-  if (f->sd == NULL)
+  if (f->data == NULL)
     return -EIO;
-  struct shared_data* sd = f->sd;
+  struct shared_data* sd = f->data;
   loff_t local_offset = *offset;
   while (sd != NULL && local_offset >= sd->sz) {
     local_offset -= sd->sz;
@@ -128,15 +129,15 @@ static ssize_t srsfs_write(struct file* filp, const char* buffer, size_t len, lo
   if (f->is_dir)
     return -EISDIR;
 
-  if (f->sd == NULL) {
-    f->sd = kvmalloc(sizeof(struct shared_data), GFP_KERNEL);
-    if (!f->sd)
+  if (f->data == NULL) {
+    f->data = kvmalloc(sizeof(struct shared_data), GFP_KERNEL);
+    if (!f->data)
       return -ENOMEM;
-    f->sd->refcount = 1;
-    f->sd->sz = 0;
-    f->sd->next = NULL;
+    f->data->refcount = 1;
+    f->data->sz = 0;
+    f->data->next = NULL;
   }
-  struct shared_data* sd = f->sd;
+  struct shared_data* sd = f->data;
   loff_t local_offset = *offset;
   while (local_offset >= SRSFS_FSIZE) {
     local_offset -= SRSFS_FSIZE;
@@ -199,95 +200,76 @@ static int srsfs_iterate(struct file* filp, struct dir_context* ctx) {
     ctx->pos++;
   }
 
-  for (size_t i = 0; i < 100; ++i) {
-    if (dirs[i].state == UNUSED || dirs[i].id != ino)
-      continue;
-    for (size_t j = ctx->pos - 2; j < SRSFS_DIR_CAP; ++j) {
-      if (dirs[i].content[j].state == UNUSED)
-        continue;
-      if (!dir_emit(
-              ctx,
-              dirs[i].content[j].name,
-              strlen(dirs[i].content[j].name),
-              dirs[i].content[j].id,
-              (dirs[i].content[j].is_dir ? DT_DIR : DT_REG)
-          ))
-        return 0;
-      ctx->pos++;
-    }
-  }
+  // for (size_t i = 0; i < 100; ++i) {
+  //   if (dirs[i].state == UNUSED || dirs[i].id != ino)
+  //     continue;
+  //   for (size_t j = ctx->pos - 2; j < SRSFS_DIR_CAP; ++j) {
+  //     if (dirs[i].content[j].state == UNUSED)
+  //       continue;
+  //     if (!dir_emit(
+  //             ctx,
+  //             dirs[i].content[j].name,
+  //             strlen(dirs[i].content[j].name),
+  //             dirs[i].content[j].id,
+  //             (dirs[i].content[j].is_dir ? DT_DIR : DT_REG)
+  //         ))
+  //       return 0;
+  //     ctx->pos++;
+  //   }
+  // }
 
   return -ENOENT;
 }
 
 static void init_file(struct srsfs_file* file, const char* name, bool do_alloc) {
-  if (file->state == USED)
-    return;
-  file->state = USED;
-  strncpy(file->name, name, SRSFS_FILENAME_LEN);
-  file->name[SRSFS_FILENAME_LEN - 1] = 0;
+  // strncpy(file->name, name, SRSFS_FILENAME_LEN);
+  // TODO: /\/\/\/\ what to do
+  // file->name[SRSFS_FILENAME_LEN - 1] = 0;
   file->is_dir = 0;
   file->id = SRSFS_ROOT_ID + ++fcnt;
   if (do_alloc) {
-    file->sd = (struct shared_data*)kvmalloc(sizeof(struct shared_data), GFP_KERNEL);
-    file->sd->refcount = 1;
-    file->sd->sz = 0;
-    file->sd->next = NULL;
+    file->data = (struct shared_data*)kvmalloc(sizeof(struct shared_data), GFP_KERNEL);
+    file->data->refcount = 1;
+    file->data->sz = 0;
+    file->data->next = NULL;
   } else
-    file->sd = NULL;
+    file->data = NULL;
 }
 
 static void destroy_file(struct srsfs_file* file) {
-  if (file->state == UNUSED)
-    return;
-  file->state = UNUSED;
-  memset(file->name, 0, SRSFS_FILENAME_LEN);
-  if (file->is_dir)
-    destroy_dir(file->ptr);
-  file->is_dir = 0;
+  // memset(file->name, 0, SRSFS_FILENAME_LEN);
+  // ??
   file->id = 0;
-  if (file->sd == NULL)
-    return;
-  free_shared(file->sd, 0);
-  file->sd = NULL;
-}
-
-static void init_dir(struct srsfs_dir* dir, const char* name, struct srsfs_file* assoc_file) {
-  if (assoc_file) {
-    init_file(assoc_file, name, false);
-    assoc_file->is_dir = 1;
-    assoc_file->ptr = dir;
-    dir->id = assoc_file->id;
-  } else
-    dir->id = SRSFS_ROOT_ID + ++fcnt;
-  dir->state = USED;
-  for (size_t i = 0; i < SRSFS_DIR_CAP; ++i) {
-    dir->content[i].state = UNUSED;
+  if (file->is_dir)
+    destroy_dir(file);
+  else {
+    file->is_dir = 0;
+    if (file->data == NULL)
+      return;
+    free_shared(file->data, 0);
+    file->data = NULL;
   }
 }
 
-static void destroy_dir(struct srsfs_dir* dir) {
-  dir->state = UNUSED;
-  for (size_t i = 0; i < SRSFS_DIR_CAP; ++i) {
-    destroy_file(dir->content + i);
-  }
+static void init_dir(struct srsfs_file* dir, const char* name) {
+  init_file(dir, name, false);
+  dir->is_dir = 1;
 }
 
-static struct srsfs_dir* alloc_dir(void) {
-  for (size_t i = 0; i < 100; ++i) {
-    if (dirs[i].state == UNUSED) {
-      return dirs + i;
-    }
-  }
-  return NULL;
+static void destroy_dir(struct srsfs_file* dir) {
+  while (dir->dir_content)  // TODO: get parent dir
+    dir->dir_content = flist_remove(NULL, dir->dir_content->content);
 }
 
-static bool is_empty(struct srsfs_dir* dir) {
-  for (size_t i = 0; i < SRSFS_DIR_CAP; ++i) {
-    if (dir->content[i].state == USED)
-      return 0;
-  }
-  return 1;
+static struct srsfs_file* alloc_dir(void) {
+  struct srsfs_file* dir;
+  dir = (struct srsfs_file*)kvmalloc(sizeof(*dir), GFP_KERNEL);
+  init_dir(dir, NULL);
+  return dir;
+}
+
+static bool is_empty(struct srsfs_file* dir) {
+  return dir && dir->is_dir && dir->dir_content == NULL;
 }
 
 static struct dentry* srsfs_lookup(
@@ -295,25 +277,26 @@ static struct dentry* srsfs_lookup(
 ) {
   ino_t root = parent_inode->i_ino;
   const char* name = child_dentry->d_name.name;
-  for (size_t i = 0; i < 100; ++i) {
-    if (dirs[i].state == UNUSED || dirs[i].id != root)
-      continue;
-    for (size_t j = 0; j < SRSFS_DIR_CAP; ++j) {
-      if (dirs[i].content[j].state == UNUSED)
-        continue;
-      if (strcmp(dirs[i].content[j].name, name))
-        continue;
-      struct inode* inode = srsfs_get_inode(
-          &nop_mnt_idmap,
-          parent_inode->i_sb,
-          NULL,
-          dirs[i].content[j].is_dir ? S_IFDIR : S_IFREG,
-          dirs[i].content[j].id
-      );
-      d_add(child_dentry, inode);
-      return NULL;
-    }
-  }
+  // TODO: get parent_dir by parent_inode
+  // for (size_t i = 0; i < 100; ++i) {
+  //   if (dirs[i].state == UNUSED || dirs[i].id != root)
+  //     continue;
+  //   for (size_t j = 0; j < SRSFS_DIR_CAP; ++j) {
+  //     if (dirs[i].content[j].state == UNUSED)
+  //       continue;
+  //     if (strcmp(dirs[i].content[j].name, name))
+  //       continue;
+  //     struct inode* inode = srsfs_get_inode(
+  //         &nop_mnt_idmap,
+  //         parent_inode->i_sb,
+  //         NULL,
+  //         dirs[i].content[j].is_dir ? S_IFDIR : S_IFREG,
+  //         dirs[i].content[j].id
+  //     );
+  //     d_add(child_dentry, inode);
+  //     return NULL;
+  //   }
+  // }
   return NULL;
 }
 
@@ -326,40 +309,42 @@ static int srsfs_create(
 ) {
   ino_t root = parent_inode->i_ino;
   const char* name = child_dentry->d_name.name;
-  for (size_t i = 0; i < 100; ++i) {
-    if (dirs[i].state == UNUSED)
-      continue;
-    if (dirs[i].id == root) {
-      for (size_t j = 0; j < SRSFS_DIR_CAP; ++j) {
-        if (dirs[i].content[j].state == USED)
-          continue;
-        init_file(dirs[i].content + j, name, 1);
-        struct inode* inode = srsfs_get_inode(
-            idmap, parent_inode->i_sb, NULL, S_IFREG | S_IRWXUGO, dirs[i].content[j].id
-        );
-        d_add(child_dentry, inode);
-        return 0;
-      }
-    }
-  }
+  // TODO: same as with lookup
+  // for (size_t i = 0; i < 100; ++i) {
+  //   if (dirs[i].state == UNUSED)
+  //     continue;
+  //   if (dirs[i].id == root) {
+  //     for (size_t j = 0; j < SRSFS_DIR_CAP; ++j) {
+  //       if (dirs[i].content[j].state == USED)
+  //         continue;
+  //       init_file(dirs[i].content + j, name, 1);
+  //       struct inode* inode = srsfs_get_inode(
+  //           idmap, parent_inode->i_sb, NULL, S_IFREG | S_IRWXUGO, dirs[i].content[j].id
+  //       );
+  //       d_add(child_dentry, inode);
+  //       return 0;
+  //     }
+  //   }
+  // }
   return -ENOMEM;
 }
 
 static int srsfs_unlink(struct inode* parent_inode, struct dentry* child_dentry) {
   const char* name = child_dentry->d_name.name;
   ino_t root = parent_inode->i_ino;
-  for (size_t i = 0; i < 100; ++i) {
-    if (dirs[i].state == UNUSED || dirs[i].id != root)
-      continue;
-    for (size_t j = 0; j < SRSFS_DIR_CAP; ++j) {
-      if (dirs[i].content[j].state == UNUSED)
-        continue;
-      if (strcmp(dirs[i].content[j].name, name))
-        continue;
-      destroy_file(dirs[i].content + j);
-      return 0;
-    }
-  }
+  // TODO: same
+  // for (size_t i = 0; i < 100; ++i) {
+  //   if (dirs[i].state == UNUSED || dirs[i].id != root)
+  //     continue;
+  //   for (size_t j = 0; j < SRSFS_DIR_CAP; ++j) {
+  //     if (dirs[i].content[j].state == UNUSED)
+  //       continue;
+  //     if (strcmp(dirs[i].content[j].name, name))
+  //       continue;
+  //     destroy_file(dirs[i].content + j);
+  //     return 0;
+  //   }
+  // }
   return -ENOENT;
 }
 
@@ -368,42 +353,44 @@ static int srsfs_mkdir(
 ) {
   const char* name = child_dentry->d_name.name;
   ino_t root = parent_inode->i_ino;
-  for (size_t i = 0; i < 100; ++i) {
-    if (dirs[i].state == UNUSED || dirs[i].id != root)
-      continue;
-    for (size_t j = 0; j < SRSFS_DIR_CAP; ++j) {
-      if (dirs[i].content[j].state == USED)
-        continue;
-      struct srsfs_dir* dir = alloc_dir();
-      if (dir == NULL)
-        return -ENOMEM;
-      init_dir(dir, name, dirs[i].content + j);
-      struct inode* inode = srsfs_get_inode(
-          idmap, parent_inode->i_sb, NULL, S_IFDIR | S_IRWXUGO, dirs[i].content[j].id
-      );
-      d_add(child_dentry, inode);
-      return 0;
-    }
-  }
+  // TODO:
+  // for (size_t i = 0; i < 100; ++i) {
+  //   if (dirs[i].state == UNUSED || dirs[i].id != root)
+  //     continue;
+  //   for (size_t j = 0; j < SRSFS_DIR_CAP; ++j) {
+  //     if (dirs[i].content[j].state == USED)
+  //       continue;
+  //     struct srsfs_dir* dir = alloc_dir();
+  //     if (dir == NULL)
+  //       return -ENOMEM;
+  //     init_dir(dir, name, dirs[i].content + j);
+  //     struct inode* inode = srsfs_get_inode(
+  //         idmap, parent_inode->i_sb, NULL, S_IFDIR | S_IRWXUGO, dirs[i].content[j].id
+  //     );
+  //     d_add(child_dentry, inode);
+  //     return 0;
+  //   }
+  // }
   return -ENOENT;
 }
 
 static int srsfs_rmdir(struct inode* parent_inode, struct dentry* child_dentry) {
   const char* name = child_dentry->d_name.name;
   ino_t root = parent_inode->i_ino;
-  for (size_t i = 0; i < 100; ++i) {
-    if (dirs[i].state == UNUSED || dirs[i].id != root)
-      continue;
-    for (size_t j = 0; j < SRSFS_DIR_CAP; ++j) {
-      if (dirs[i].content[j].state == UNUSED || !dirs[i].content[j].is_dir ||
-          strcmp(dirs[i].content[j].name, name))
-        continue;
-      if (!is_empty(dirs[i].content[j].ptr))
-        return -1;
-      destroy_file(dirs[i].content + j);
-      return 0;
-    }
-  }
+  // TODO:
+  // for (size_t i = 0; i < 100; ++i) {
+  //   if (dirs[i].state == UNUSED || dirs[i].id != root)
+  //     continue;
+  //   for (size_t j = 0; j < SRSFS_DIR_CAP; ++j) {
+  //     if (dirs[i].content[j].state == UNUSED || !dirs[i].content[j].is_dir ||
+  //         strcmp(dirs[i].content[j].name, name))
+  //       continue;
+  //     if (!is_empty(dirs[i].content[j].ptr))
+  //       return -1;
+  //     destroy_file(dirs[i].content + j);
+  //     return 0;
+  //   }
+  // }
   return -ENOENT;
 }
 
@@ -464,22 +451,16 @@ static void set_fs_params(void) {
 }
 
 static void prepare_lists(void) {
-  for (int i = 0; i < 100; ++i) {
-    dirs[i].state = UNUSED;
-    for (int j = 0; j < SRSFS_DIR_CAP; ++j) {
-      dirs[i].content[j].is_dir = 0;  // prevent from dereferencing garbage pointers
-      dirs[i].content[j].sd = NULL;   // prevent free on garbage pointer
-      destroy_file(dirs[i].content + j);
-    }
-  }
+  rootdir.name = "srsfs";
+  rootdir.id = SRSFS_ROOT_ID + fcnt++;
+  rootdir.parent_dir = NULL;
+  rootdir.is_dir = true;
+  rootdir.dir_content = NULL;  // empty on create
 }
 
 static int __init srsfs_init(void) {
   LOG("SRSFS joined the kernel\n");
   prepare_lists();
-  rootdir = dirs;
-  rootdir->state = USED;
-  rootdir->id = SRSFS_ROOT_ID;
   set_fs_params();
   register_filesystem(&srsfs_fs_type);
   LOG("SRSFS successfully registered\n");
@@ -489,13 +470,14 @@ static int __init srsfs_init(void) {
 static void __exit srsfs_exit(void) {
   unregister_filesystem(&srsfs_fs_type);
   LOG("SRSFS unregistered successfully\n");
-  for (size_t i = 0; i < 100; ++i) {
-    if (dirs[i].state == UNUSED)
-      continue;
-    for (size_t j = 0; j < SRSFS_DIR_CAP; ++j) {
-      destroy_file(dirs[i].content + j);
-    }
-  }
+  // for (size_t i = 0; i < 100; ++i) {
+  //   if (dirs[i].state == UNUSED)
+  //     continue;
+  //   for (size_t j = 0; j < SRSFS_DIR_CAP; ++j) {
+  //     destroy_file(dirs[i].content + j);
+  //   }
+  // }
+  // TODO: cleanup
   LOG("SRSFS left the kernel\n");
 }
 

@@ -1,4 +1,6 @@
-obj-m += source/srsfs.o
+obj-m += srsfs.o
+
+srsfs-objs := source/srsfs.o source/flist.o
 
 PWD := $(CURDIR)
 KDIR = /lib/modules/`uname -r`/build
@@ -15,7 +17,7 @@ clean:
 	rm -rf .cache testtmp
 
 test: all
-	insmod source/srsfs.ko
+	insmod srsfs.ko
 	mkdir -p /mnt/srsfs/
 	mkdir -p testtmp/
 	mount -t srsfs todo /mnt/srsfs/
