@@ -27,9 +27,9 @@ struct flist* flist_remove(struct flist* head, struct srsfs_file* file) {
   if (head == NULL)
     return NULL;
   if (head->content == file) {
+    struct flist* new_head = head == head->next ? NULL : head->next;
     head->next->prev = head->prev;
     head->prev->next = head->next;
-    struct flist* new_head = head->next;
     LOG("flist_remove: struct flist* head = 0x%lx", head);
     // NOTE: file should be (kv)freed outside
     kvfree(head);
