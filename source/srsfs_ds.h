@@ -2,7 +2,7 @@
 
 #define _SRSFS_DS_H
 
-#include <linux/vmalloc.h>
+#include <linux/types.h>
 
 #define SRSFS_ROOT_ID 1000
 #define SRSFS_FSIZE 1024  // 1KB

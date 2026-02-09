@@ -14,11 +14,11 @@ struct flist {  // NOTE: should be allocated/freed using kvmalloc/kvfree respect
   struct flist* prev;
 };
 
-static struct flist* flist_push(struct flist* head, struct srsfs_file* file);
+struct flist* flist_push(struct flist* head, struct srsfs_file* file);
 
-static struct flist* flist_remove(struct flist* head, struct srsfs_file* file);
+struct flist* flist_remove(struct flist* head, struct srsfs_file* file);
 
-static struct srsfs_file* flist_get(
+struct srsfs_file* flist_get(
     struct flist* head, size_t index
 );  // NOTE: list[i] is not guranteed to be the same element between push/remove
 

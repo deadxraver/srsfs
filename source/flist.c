@@ -5,7 +5,7 @@
 #define SRSFS_ROOT_ID 1000
 #define SRSFS_FSIZE 1024  // 1KB
 
-static struct flist* flist_push(struct flist* head, struct srsfs_file* file) {
+struct flist* flist_push(struct flist* head, struct srsfs_file* file) {
   if (head == NULL) {
     head = (struct flist*)kvmalloc(sizeof(*head), GFP_KERNEL);
     head->next = head;
@@ -21,7 +21,7 @@ static struct flist* flist_push(struct flist* head, struct srsfs_file* file) {
   return new_head;
 }
 
-static struct flist* flist_remove(struct flist* head, struct srsfs_file* file) {
+struct flist* flist_remove(struct flist* head, struct srsfs_file* file) {
   if (head == NULL)
     return NULL;
   if (head->content == file) {
@@ -46,7 +46,7 @@ static struct flist* flist_remove(struct flist* head, struct srsfs_file* file) {
   return head;  // or NULL??
 }
 
-static struct srsfs_file* flist_get(struct flist* head, size_t index) {
+struct srsfs_file* flist_get(struct flist* head, size_t index) {
   if (head == NULL)
     return NULL;
   if (index == 0)
