@@ -97,6 +97,13 @@ struct flist* flist_iterate(struct flist* head, struct flist* cur) {
   return cur->next;
 }
 
+/**
+ * Check whether the given list is empty.
+ */
+bool flist_is_empty(struct flist* head) {
+  return head->next == head;
+}
+
 void sd_init(struct shared_data* sd) {
   sd->refcount = 1;
   sd->data = NULL;

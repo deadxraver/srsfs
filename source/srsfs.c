@@ -37,7 +37,7 @@ struct file_operations srsfs_file_ops = {
     .write = srsfs_write,
 };
 
-struct inode* srsfs_new_inode(
+static struct inode* srsfs_new_inode(
     struct super_block* sb, struct inode* parent, struct srsfs_file* file
 ) {
   if (sb == NULL && parent == NULL) {
@@ -68,7 +68,7 @@ struct inode* srsfs_new_inode(
   return inode;
 }
 
-inline struct inode* srsfs_get_inode(struct super_block* sb, struct srsfs_file* file) {
+static inline struct inode* srsfs_get_inode(struct super_block* sb, struct srsfs_file* file) {
   return ilookup(sb, file->i_ino);
 }
 
@@ -209,7 +209,6 @@ static int srsfs_iterate(struct file* filp, struct dir_context* ctx) {
   struct inode* inode = d_inode(dentry);
   struct inode* parent_inode = d_inode(dentry->d_parent);
   ino_t ino = inode->i_ino;
-  int cnt = 0;
 
   if (ctx->pos == 0) {
     if (!dir_emit(ctx, ".", 1, ino, DT_DIR))
@@ -224,11 +223,9 @@ static int srsfs_iterate(struct file* filp, struct dir_context* ctx) {
     ctx->pos++;
   }
 
-  LOG("srsfs_iterate: struct srsfs_inode* i = 0x%lx", parent_inode);
-  LOG("srsfs_iterate: struct srsfs_inode_info* ii = 0x%lx", parent_inode->i_private);
-  if (parent_inode == NULL)
-    return 0;
-  struct flist* list = &((struct srsfs_inode_info*)parent_inode->i_private)->dir_content;
+  LOG("srsfs_iterate: struct srsfs_inode* i = 0x%lx", filp->f_inode);
+  LOG("srsfs_iterate: struct srsfs_inode_info* ii = 0x%lx", filp->f_inode->i_private);
+  struct flist* list = &((struct srsfs_inode_info*)filp->f_inode->i_private)->dir_content;
   LOG("ls");
   print_list(list);
   for (size_t i = ctx->pos - 2;; ++i) {
@@ -238,10 +235,9 @@ static int srsfs_iterate(struct file* filp, struct dir_context* ctx) {
     if (!dir_emit(ctx, f->name, strlen(f->name), f->i_ino, f->is_dir ? DT_DIR : DT_REG))
       return 0;
     ctx->pos++;
-    ++cnt;
   }
 
-  return cnt;
+  return 0;
 }
 
 static struct dentry* srsfs_lookup(
@@ -295,8 +291,6 @@ static int srsfs_create(
   print_list(list);
   return 0;
 mem:
-  if (inode == NULL)
-    kvfree(inode);
   if (f) {
     destroy_file(f);
     kvfree(f);
@@ -330,26 +324,35 @@ static int srsfs_mkdir(
     struct mnt_idmap* idmap, struct inode* parent_inode, struct dentry* child_dentry, umode_t mode
 ) {
   const char* name = child_dentry->d_name.name;
-  ino_t root = parent_inode->i_ino;
-  // TODO:
-  // for (size_t i = 0; i < 100; ++i) {
-  //   if (dirs[i].state == UNUSED || dirs[i].id != root)
-  //     continue;
-  //   for (size_t j = 0; j < SRSFS_DIR_CAP; ++j) {
-  //     if (dirs[i].content[j].state == USED)
-  //       continue;
-  //     struct srsfs_dir* dir = alloc_dir();
-  //     if (dir == NULL)
-  //       return -ENOMEM;
-  //     init_dir(dir, name, dirs[i].content + j);
-  //     struct inode* inode = srsfs_get_inode(
-  //         idmap, parent_inode->i_sb, NULL, S_IFDIR | S_IRWXUGO, dirs[i].content[j].id
-  //     );
-  //     d_add(child_dentry, inode);
-  //     return 0;
-  //   }
-  // }
-  return -ENOENT;
+  struct srsfs_file* dir = NULL;
+  struct inode* inode = NULL;
+  struct flist* parent_dir = &((struct srsfs_inode_info*)parent_inode->i_private)->dir_content;
+  for (struct flist* node = flist_iterate(parent_dir, parent_dir); node != NULL;
+       node = flist_iterate(parent_dir, node)) {
+    struct srsfs_file* f = node->content;
+    if (strcmp(f->name, name) == 0)
+      return -EEXIST;
+  }
+  dir = (struct srsfs_file*)kvmalloc(sizeof(*dir), GFP_KERNEL);
+  if (dir == NULL)
+    goto mem;
+  init_dir(dir, name, ALLOC_ID());
+  inode = srsfs_new_inode(NULL, parent_inode, dir);
+  if (inode == NULL)
+    goto mem;
+  if (!flist_push(parent_dir, dir))
+    goto mem;
+  d_add(child_dentry, inode);
+  LOG("Successfully created dir %s", dir->name);
+  print_list(parent_dir);
+  return 0;
+mem:
+  if (dir != NULL) {
+    destroy_file(dir);
+    kvfree(dir);
+    dir = NULL;
+  }
+  return -ENOMEM;
 }
 
 static int srsfs_rmdir(struct inode* parent_inode, struct dentry* child_dentry) {
