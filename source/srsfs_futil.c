@@ -13,6 +13,11 @@ void init_file(struct srsfs_file* file, const char* name, int id) {
   file->i_ino = id;
 }
 
+void init_dir(struct srsfs_file* file, const char* name, int id) {
+  init_file(file, name, id);
+  file->is_dir = 1;
+}
+
 void destroy_file(struct srsfs_file* file) {
   if (file == NULL)
     return;

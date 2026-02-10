@@ -370,8 +370,7 @@ static int srsfs_rmdir(struct inode* parent_inode, struct dentry* child_dentry) 
 }
 
 static int srsfs_fill_super(struct super_block* sb, void* data, int silent) {
-  init_file(&rootdir, "srsfs", ALLOC_ID());
-  rootdir.is_dir = 1;
+  init_dir(&rootdir, "srsfs", ALLOC_ID());
   struct inode* inode = srsfs_new_inode(sb, NULL, &rootdir);
 
   sb->s_root = d_make_root(inode);
