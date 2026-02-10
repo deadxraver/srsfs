@@ -113,74 +113,53 @@ static ssize_t srsfs_read(struct file* filp, char* buffer, size_t len, loff_t* o
   struct srsfs_inode_info* ii = (struct srsfs_inode_info*)inode->i_private;
   if (ii->is_dir)
     return -EISDIR;
-  struct shared_data sd = ii->data;
-  if (sd.data == NULL)
+  struct shared_data* sd = &ii->data;
+  LOG("sd->data addr: 0x%lx", sd->data);
+  if (sd->data == NULL)
     return 0;  // empty file
   loff_t local_offset = *offset;
-  size_t to_read = min(sd.sz - local_offset, len);
-  if (copy_to_user(buffer, sd.data + local_offset, to_read))
+  size_t to_read = min(sd->sz - local_offset, len);
+  LOG("srsfs_read: sd->sz=%ld,sd->cap=%ld,len=%ld,off=%ld,to_read=%ld",
+      sd->sz,
+      sd->capacity,
+      len,
+      local_offset,
+      to_read);
+  if (copy_to_user(buffer, sd->data + local_offset, to_read))
     return -EFAULT;
+  *offset += to_read;
   return to_read;
 }
 
 static ssize_t srsfs_write(struct file* filp, const char* buffer, size_t len, loff_t* offset) {
-  return -1;
-  // struct inode* inode = filp->f_inode;
-  // struct srsfs_file* f = NULL;  // getfile(inode->i_ino);
-  // if (f == NULL)
-  //   return -ENOENT;
-  // if (f->is_dir)
-  //   return -EISDIR;
+  struct inode* inode = filp->f_inode;
+  struct srsfs_inode_info* ii = (struct srsfs_inode_info*)inode->i_private;
+  if (ii->is_dir) {
+    LOG("srsfs_write: is a directory");
+    return -EISDIR;
+  }
+  struct shared_data* sd = &ii->data;
+  loff_t local_offset = *offset;
+  LOG("srsfs_write: sd->sz=%ld,sd->cap=%ld,len=%ld,off=%ld", sd->sz, sd->capacity, len, local_offset
+  );
+  char* newdata = kvmalloc(len + local_offset, GFP_KERNEL);
+  if (newdata == NULL) {
+    LOG("srsfs_write: could not realloc");
+    return -ENOMEM;
+  }
+  if (sd->data) {
+    memcpy(newdata, sd->data, min(sd->sz, len + local_offset));
+    kvfree(sd->data);
+  }
+  sd->data = newdata;
+  sd->capacity = len + local_offset;
+  LOG("new sd->data addr: 0x%lx", sd->data);
+  if (copy_from_user(sd->data + local_offset, buffer, len))
+    return -EFAULT;
+  sd->sz = sd->capacity;
+  *offset += len;
 
-  // if (f->data == NULL) {
-  //   f->data = kvmalloc(sizeof(struct shared_data), GFP_KERNEL);
-  //   if (!f->data)
-  //     return -ENOMEM;
-  //   f->data->refcount = 1;
-  //   f->data->sz = 0;
-  //   f->data->next = NULL;
-  // }
-  // struct shared_data* sd = f->data;
-  // loff_t local_offset = *offset;
-  // while (local_offset >= SRSFS_FSIZE) {
-  //   local_offset -= SRSFS_FSIZE;
-  //   if (sd->next == NULL) {
-  //     sd->next = kvmalloc(sizeof(struct shared_data), GFP_KERNEL);
-  //     if (!sd->next)
-  //       return -ENOMEM;
-  //     sd->next->refcount = 1;
-  //     sd->next->sz = 0;
-  //     sd->next->next = NULL;
-  //   }
-  //   sd = sd->next;
-  // }
-  // size_t total_written = 0;
-  // while (total_written < len) {
-  //   size_t to_write = len - total_written < SRSFS_FSIZE - local_offset ? len - total_written
-  //                                                                      : SRSFS_FSIZE -
-  //                                                                      local_offset;
-
-  //   if (copy_from_user(sd->data + local_offset, buffer + total_written, to_write))
-  //     return -EFAULT;
-  //   if (local_offset + to_write > sd->sz)
-  //     sd->sz = local_offset + to_write;
-  //   total_written += to_write;
-  //   local_offset = 0;
-  //   if (total_written < len) {
-  //     if (sd->next == NULL) {
-  //       sd->next = kvmalloc(sizeof(struct shared_data), GFP_KERNEL);
-  //       if (sd->next == NULL)
-  //         return -ENOMEM;
-  //       sd->next->refcount = 1;
-  //       sd->next->sz = 0;
-  //       sd->next->next = NULL;
-  //     }
-  //     sd = sd->next;
-  //   }
-  // }
-
-  // *offset += total_written;
-  // return total_written;
+  return len;
 }
 
 static int srsfs_iterate(struct file* filp, struct dir_context* ctx) {
