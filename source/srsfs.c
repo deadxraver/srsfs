@@ -307,19 +307,22 @@ mem:
 static int srsfs_unlink(struct inode* parent_inode, struct dentry* child_dentry) {
   const char* name = child_dentry->d_name.name;
   ino_t root = parent_inode->i_ino;
-  // TODO: same
-  // for (size_t i = 0; i < 100; ++i) {
-  //   if (dirs[i].state == UNUSED || dirs[i].id != root)
-  //     continue;
-  //   for (size_t j = 0; j < SRSFS_DIR_CAP; ++j) {
-  //     if (dirs[i].content[j].state == UNUSED)
-  //       continue;
-  //     if (strcmp(dirs[i].content[j].name, name))
-  //       continue;
-  //     destroy_file(dirs[i].content + j);
-  //     return 0;
-  //   }
-  // }
+  struct srsfs_file* file = NULL;
+  struct flist* list = &((struct srsfs_inode_info*)
+      parent_inode->i_private)->dir_content;
+  for (struct flist* node = flist_iterate(list, list);
+      node != NULL; node = flist_iterate(list, node)) {
+          file = node->content;
+          if (strcmp(file->name, name))
+              continue;
+          if (file->is_dir)
+              return -EISDIR;
+          flist_remove(list, file);
+          destroy_file(file);
+          kvfree(file);
+          file = NULL;
+          return 0;
+      }
   return -ENOENT;
 }
 
