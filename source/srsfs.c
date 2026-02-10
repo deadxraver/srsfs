@@ -357,21 +357,26 @@ mem:
 
 static int srsfs_rmdir(struct inode* parent_inode, struct dentry* child_dentry) {
   const char* name = child_dentry->d_name.name;
-  ino_t root = parent_inode->i_ino;
-  // TODO:
-  // for (size_t i = 0; i < 100; ++i) {
-  //   if (dirs[i].state == UNUSED || dirs[i].id != root)
-  //     continue;
-  //   for (size_t j = 0; j < SRSFS_DIR_CAP; ++j) {
-  //     if (dirs[i].content[j].state == UNUSED || !dirs[i].content[j].is_dir ||
-  //         strcmp(dirs[i].content[j].name, name))
-  //       continue;
-  //     if (!is_empty(dirs[i].content[j].ptr))
-  //       return -1;
-  //     destroy_file(dirs[i].content + j);
-  //     return 0;
-  //   }
-  // }
+  struct flist* list = &((struct srsfs_inode_info*)parent_inode->i_private)->dir_content;
+  for (struct flist* node = flist_iterate(list, list); node != NULL;
+       node = flist_iterate(list, node)) {
+    struct srsfs_file* f = node->content;
+    if (strcmp(name, f->name))
+      continue;
+    if (!f->is_dir)
+      return -ENOTDIR;
+    struct inode* dir_inode = d_inode(child_dentry);
+    if (dir_inode == NULL) {
+      LOG("Failed to get inode for %d %s", f->i_ino, f->name);
+      return -EINVAL;
+    }
+    if (!flist_is_empty(&((struct srsfs_inode_info*)dir_inode->i_private)->dir_content))
+      return -EPERM;
+    flist_remove(list, f);
+    destroy_file(f);
+    kvfree(f);
+    return 0;
+  }
   return -ENOENT;
 }
 
