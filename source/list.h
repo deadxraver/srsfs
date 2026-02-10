@@ -1,6 +1,6 @@
-#ifndef _FLIST_H
+#ifndef _LIST_H
 
-#define _FLIST_H
+#define _LIST_H
 
 #include "srsfs_ds.h"
 
@@ -20,4 +20,4 @@ bool flist_is_empty(struct flist* head);
 
 void sd_init(struct shared_data* sd);
 
-#endif  // !_FLIST_H
+#endif  // !_LIST_H

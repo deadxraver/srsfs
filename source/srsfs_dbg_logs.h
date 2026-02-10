@@ -2,7 +2,7 @@
 
 #define _SRSFS_DBG_LOGS_H
 
-#include "flist.h"
+#include "list.h"
 #include "srsfs_ds.h"
 
 void print_list(struct flist* head);

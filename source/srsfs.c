@@ -1,6 +1,6 @@
 #include "srsfs.h"
 
-#include "flist.h"
+#include "list.h"
 #include "srsfs_dbg_logs.h"
 #include "srsfs_futil.h"
 

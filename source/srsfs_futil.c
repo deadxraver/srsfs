@@ -3,7 +3,7 @@
 #include <linux/mm.h>
 #include <linux/stddef.h>
 
-#include "flist.h"
+#include "list.h"
 
 #define LOG(fmt, ...) pr_info("[srsfs_futil]: " fmt, ##__VA_ARGS__)
 
