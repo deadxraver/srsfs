@@ -12,8 +12,6 @@
 
 #define LOG(fmt, ...) pr_info("[" MODULE_NAME "]: " fmt, ##__VA_ARGS__)
 
-#define SRSFS_I(inode) container_of(inode, struct srsfs_inode_info, vfs_inode)
-
 #define MODULE_NAME "srsfs"
 
 static int srsfs_link(
@@ -37,8 +35,6 @@ static int srsfs_rmdir(struct inode*, struct dentry*);
 static struct dentry* srsfs_lookup(
     struct inode* parent_inode, struct dentry* child_dentry, unsigned int flag
 );
-
-static struct inode* srsfs_get_inode(struct super_block*, struct inode*, struct srsfs_file*);
 
 static int srsfs_fill_super(struct super_block* sb, void* data, int silent);
 

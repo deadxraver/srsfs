@@ -2,63 +2,86 @@
 
 #include <linux/mm.h>
 
-#define SRSFS_ROOT_ID 1000
-#define SRSFS_FSIZE 1024  // 1KB
+#define LOG(fmt, ...) pr_info("[srsfs/flist]: " fmt, ##__VA_ARGS__)
 
-#define LOG(fmt, ...) pr_info("[flist]: " fmt, ##__VA_ARGS__)
-
-struct flist* flist_push(struct flist* head, struct srsfs_file* file) {
-  if (head == NULL) {
-    head = (struct flist*)kvmalloc(sizeof(*head), GFP_KERNEL);
-    head->next = head;
-    head->prev = head;
-    head->content = file;
-    return head;
-  }
-  struct flist* new_head = (struct flist*)kvmalloc(sizeof(*head), GFP_KERNEL);
-  new_head->next = head;
-  new_head->prev = head->prev;
-  head->prev = new_head;
-  new_head->prev->next = new_head;
-  return new_head;
+/**
+ * Initializes given memory as an empty list.
+ */
+void flist_init(struct flist* head) {
+  if (head == NULL)
+    LOG("flist_init: head is NULL!!!");
+  head->content = NULL;
+  head->next = head;
+  head->prev = NULL;
 }
 
-struct flist* flist_remove(struct flist* head, struct srsfs_file* file) {
+/**
+ * Tries to push given file to list.
+ * On success returns true, on fault - false.
+ * NOTE: NULL is not checked for easier debug.
+ */
+bool flist_push(struct flist* head, struct srsfs_file* file) {
   if (head == NULL)
-    return NULL;
-  if (head->content == file) {
-    struct flist* new_head = head == head->next ? NULL : head->next;
-    head->next->prev = head->prev;
-    head->prev->next = head->next;
-    LOG("flist_remove: struct flist* head = 0x%lx", head);
-    // NOTE: file should be (kv)freed outside
-    kvfree(head);
-    return new_head;
+    LOG("flist_push: head is NULL!!!");
+  struct flist* new_node = (struct flist*)kvmalloc(sizeof(struct flist), GFP_KERNEL);
+  if (new_node == NULL) {
+    LOG("flist_push: could not allocate memory for new node");
+    return false;
   }
+  new_node->content = file;
+  new_node->next = head->next;
+  new_node->prev = head;
+  head->next = new_node;
+  new_node->next->prev = new_node;
+  return true;
+}
+
+/**
+ * Try to remove file from list.
+ * If no such element, returns false.
+ * NOTE: NULL not checked.
+ */
+bool flist_remove(struct flist* head, struct srsfs_file* file) {
+  if (head == NULL)
+    LOG("flist_remove: head is NULL!!!");
   for (struct flist* node = head->next; node != head; node = node->next) {
     if (node->content == file) {
-      node->prev->next = node->next;
       node->next->prev = node->prev;
-      head = node->prev;
-      LOG("flist_remove: struct flist* node = 0x%lx", node);
-      // NOTE: free
+      node->prev->next = node->next;
       kvfree(node);
-      return head;
+      return true;
     }
   }
-  // not found
-  return head;  // or NULL??
+  return false;  // not found
 }
 
+/**
+ * Get file pointer at index.
+ * If index >= list size, return NULL.
+ */
 struct srsfs_file* flist_get(struct flist* head, size_t index) {
   if (head == NULL)
-    return NULL;
-  if (index == 0)
-    return head->content;
-  size_t i = 1;  // head is present
+    LOG("flist_get: head is NULL!!!");
+  size_t i = 0;
   for (struct flist* node = head->next; node != head; node = node->next, ++i) {
     if (i == index)
       return node->content;
   }
   return NULL;
+}
+
+/**
+ * Removes first element and returns it as a result.
+ * NULL on empty list.
+ */
+struct srsfs_file* flist_pop(struct flist* head) {
+  if (head->next == head)
+    return NULL;
+  struct flist* elem = head->next;
+  struct srsfs_file* res = elem->content;
+  head->next = elem->next;
+  elem->next->prev = head;
+  kvfree(elem);
+  elem = NULL;
+  return res;
 }

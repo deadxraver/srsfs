@@ -7,6 +7,7 @@
 /**
  * double-linked round list storing srsfs files.
  * Each node represents single file.
+ * Head node should not contain useful info.
  */
 struct flist {  // NOTE: should be allocated/freed using kvmalloc/kvfree respectively
   struct srsfs_file* content;
@@ -14,12 +15,14 @@ struct flist {  // NOTE: should be allocated/freed using kvmalloc/kvfree respect
   struct flist* prev;
 };
 
-struct flist* flist_push(struct flist* head, struct srsfs_file* file);
+void flist_init(struct flist* head);
 
-struct flist* flist_remove(struct flist* head, struct srsfs_file* file);
+bool flist_push(struct flist* head, struct srsfs_file* file);
 
-struct srsfs_file* flist_get(
-    struct flist* head, size_t index
-);  // NOTE: list[i] is not guranteed to be the same element between push/remove
+bool flist_remove(struct flist* head, struct srsfs_file* file);
+
+struct srsfs_file* flist_get(struct flist* head, size_t index);
+
+struct srsfs_file* flist_pop(struct flist* head);
 
 #endif  // !_FLIST_H
