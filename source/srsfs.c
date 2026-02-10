@@ -205,58 +205,60 @@ static ssize_t srsfs_write(struct file* filp, const char* buffer, size_t len, lo
 }
 
 static int srsfs_iterate(struct file* filp, struct dir_context* ctx) {
-  // struct dentry* dentry = filp->f_path.dentry;
-  // struct inode* inode = d_inode(dentry);
-  // struct inode* parent_inode;
-  // ino_t ino = inode->i_ino;
-  // ino_t parent_ino;
+  struct dentry* dentry = filp->f_path.dentry;
+  struct inode* inode = d_inode(dentry);
+  struct inode* parent_inode = d_inode(dentry->d_parent);
+  ino_t ino = inode->i_ino;
+  int cnt = 0;
 
-  // if (ctx->pos == 0) {
-  //   if (!dir_emit(ctx, ".", 1, ino, DT_DIR))
-  //     return 0;
-  //   ctx->pos++;
-  // }
+  if (ctx->pos == 0) {
+    if (!dir_emit(ctx, ".", 1, ino, DT_DIR))
+      return 0;
+    ctx->pos++;
+  }
 
-  // if (ctx->pos == 1) {
-  //   parent_inode = d_inode(dentry->d_parent);
-  //   parent_ino = parent_inode->i_ino;
-  //   if (!dir_emit(ctx, "..", 2, parent_ino, DT_DIR))
-  //     return 0;
-  //   ctx->pos++;
-  // }
+  if (ctx->pos == 1) {
+    ino_t parent_ino = parent_inode->i_ino;
+    if (!dir_emit(ctx, "..", 2, parent_ino, DT_DIR))
+      return 0;
+    ctx->pos++;
+  }
 
-  // LOG("srsfs_iterate: struct srsfs_inode* i = 0x%lx", parent_inode);
-  // LOG("srsfs_iterate: struct srsfs_inode_info* ii = 0x%lx", SRSFS_I(parent_inode));
-  // if (parent_inode == NULL)
-  //   return 0;
-  // struct flist* list = SRSFS_I(parent_inode)->dir_content;
-  // for (int i = ctx->pos - 2;; ++i) {
-  //   struct srsfs_file* f = flist_get(list, i);
-  //   if (f == NULL)
-  //     return 0;
-  //   if (!dir_emit(ctx, f->name, strlen(f->name), f->id, f->is_dir ? DT_DIR : DT_REG))
-  //     return 0;
-  //   ctx->pos++;
-  // }
+  LOG("srsfs_iterate: struct srsfs_inode* i = 0x%lx", parent_inode);
+  LOG("srsfs_iterate: struct srsfs_inode_info* ii = 0x%lx", parent_inode->i_private);
+  if (parent_inode == NULL)
+    return 0;
+  struct flist* list = &((struct srsfs_inode_info*)parent_inode->i_private)->dir_content;
+  LOG("ls");
+  print_list(list);
+  for (size_t i = ctx->pos - 2;; ++i) {
+    struct srsfs_file* f = flist_get(list, i);
+    if (f == NULL)
+      break;
+    if (!dir_emit(ctx, f->name, strlen(f->name), f->i_ino, f->is_dir ? DT_DIR : DT_REG))
+      return 0;
+    ctx->pos++;
+    ++cnt;
+  }
 
-  return -ENOENT;
+  return cnt;
 }
 
 static struct dentry* srsfs_lookup(
     struct inode* parent_inode, struct dentry* child_dentry, unsigned int flag
 ) {
-  // struct srsfs_inode_info* ii = SRSFS_I(parent_inode);
-  // struct flist* list = ii->dir_content;
-  // const char* name = child_dentry->d_name.name;
-  // int i = 0;
-  // struct srsfs_file* f = flist_get(list, i);
-  // for (; f; f = flist_get(list, ++i)) {
-  //   if (strcmp(f->name, name))
-  //     continue;
-  //   struct inode* inode = srsfs_get_inode(parent_inode->i_sb, parent_inode, f);
-  //   d_add(child_dentry, inode);
-  //   return NULL;
-  // }
+  struct srsfs_inode_info* ii = (struct srsfs_inode_info*)parent_inode->i_private;
+  struct flist* list = &ii->dir_content;
+  const char* name = child_dentry->d_name.name;
+  for (struct flist* node = flist_iterate(list, list); node != NULL;
+       node = flist_iterate(list, node)) {
+    struct srsfs_file* f = node->content;
+    if (strcmp(f->name, name))
+      continue;
+    struct inode* inode = srsfs_get_inode(parent_inode->i_sb, f);
+    d_add(child_dentry, inode);
+    return NULL;
+  }
   return NULL;
 }
 
