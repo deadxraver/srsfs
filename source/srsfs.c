@@ -274,7 +274,7 @@ static int srsfs_create(
   print_list(list);
   for (struct flist* node = flist_iterate(list, list); node != NULL;
        node = flist_iterate(list, node)) {
-    if (strcmp(node->content->name, name))
+    if (strcmp(node->content->name, name) == 0)
       return -EEXIST;
   }
   struct srsfs_file* f = NULL;
