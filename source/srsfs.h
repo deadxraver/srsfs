@@ -44,6 +44,4 @@ static struct dentry* srsfs_mnt(
 
 static void srsfs_kill(struct super_block* sb);
 
-static void set_fs_params(void);
-
 #endif  // !_SRSFS_H

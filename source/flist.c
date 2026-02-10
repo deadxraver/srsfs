@@ -85,3 +85,14 @@ struct srsfs_file* flist_pop(struct flist* head) {
   elem = NULL;
   return res;
 }
+
+/**
+ * Iterator for less costly list traversion.
+ * Put current node to current to get next.
+ * Returns NULL when next element is head.
+ */
+struct flist* flist_iterate(struct flist* head, struct flist* cur) {
+  if (cur->next == head)
+    return NULL;
+  return cur->next;
+}

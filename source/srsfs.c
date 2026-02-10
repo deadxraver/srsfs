@@ -37,6 +37,41 @@ struct file_operations srsfs_file_ops = {
     .write = srsfs_write,
 };
 
+struct inode* srsfs_new_inode(
+    struct super_block* sb, struct inode* parent, struct srsfs_file* file
+) {
+  if (sb == NULL && parent == NULL) {
+    LOG("srsfs_new_inode: sb & parent are NULL");
+    return NULL;
+  }
+  if (sb == NULL)
+    sb = parent->i_sb;
+  struct inode* inode = new_inode(sb);
+  if (inode == NULL) {
+    LOG("srsfs_new_inode: failed to create inode");
+    return NULL;
+  }
+  inode_init_owner(&nop_mnt_idmap, inode, parent, (file->is_dir ? S_IFDIR : S_IFREG) | S_IRWXUGO);
+  inode->i_ino = file->i_ino;
+  struct srsfs_inode_info* ii =
+      (struct srsfs_inode_info*)kvmalloc(sizeof(struct srsfs_inode_info), GFP_KERNEL);
+  ii->is_dir = file->is_dir;
+  if (ii->is_dir) {
+    flist_init(&ii->dir_content);
+    inode->i_fop = &srsfs_dir_ops;
+  } else {
+    inode->i_fop = &srsfs_file_ops;
+    ii->data = NULL;
+  }
+  inode->i_op = &srsfs_inode_ops;
+  inode->i_private = ii;
+  return inode;
+}
+
+inline struct inode* srsfs_get_inode(struct super_block* sb, struct srsfs_file* file) {
+  return ilookup(sb, file->i_ino);
+}
+
 static int srsfs_link(
     struct dentry* old_dentry, struct inode* parent_dir, struct dentry* new_dentry
 ) {
@@ -232,25 +267,38 @@ static int srsfs_create(
     umode_t mode,
     bool b
 ) {
-  ino_t root = parent_inode->i_ino;
   const char* name = child_dentry->d_name.name;
-  // TODO: same as with lookup
-  // for (size_t i = 0; i < 100; ++i) {
-  //   if (dirs[i].state == UNUSED)
-  //     continue;
-  //   if (dirs[i].id == root) {
-  //     for (size_t j = 0; j < SRSFS_DIR_CAP; ++j) {
-  //       if (dirs[i].content[j].state == USED)
-  //         continue;
-  //       init_file(dirs[i].content + j, name, 1);
-  //       struct inode* inode = srsfs_get_inode(
-  //           idmap, parent_inode->i_sb, NULL, S_IFREG | S_IRWXUGO, dirs[i].content[j].id
-  //       );
-  //       d_add(child_dentry, inode);
-  //       return 0;
-  //     }
-  //   }
-  // }
+  struct srsfs_inode_info* ii = (struct srsfs_inode_info*)parent_inode->i_private;
+  struct flist* list = &ii->dir_content;
+  LOG("starting srsfs_create...");
+  print_list(list);
+  for (struct flist* node = flist_iterate(list, list); node != NULL;
+       node = flist_iterate(list, node)) {
+    if (strcmp(node->content->name, name))
+      return -EEXIST;
+  }
+  struct srsfs_file* f = NULL;
+  struct inode* inode = NULL;
+  f = (struct srsfs_file*)kvmalloc(sizeof(struct srsfs_file), GFP_KERNEL);
+  if (f == NULL)
+    goto mem;
+  init_file(f, name, ALLOC_ID());
+  inode = srsfs_new_inode(NULL, parent_inode, f);
+  if (inode == NULL)
+    goto mem;
+  if (!flist_push(list, f))
+    goto mem;
+  d_add(child_dentry, inode);
+  LOG("Success.");
+  print_list(list);
+  return 0;
+mem:
+  if (inode == NULL)
+    kvfree(inode);
+  if (f) {
+    destroy_file(f);
+    kvfree(f);
+  }
   return -ENOMEM;
 }
 
@@ -320,35 +368,33 @@ static int srsfs_rmdir(struct inode* parent_inode, struct dentry* child_dentry) 
 }
 
 static int srsfs_fill_super(struct super_block* sb, void* data, int silent) {
-  // struct inode* inode = srsfs_get_inode(sb, NULL, &rootdir);
+  init_file(&rootdir, "srsfs", ALLOC_ID());
+  rootdir.is_dir = 1;
+  struct inode* inode = srsfs_new_inode(sb, NULL, &rootdir);
 
-  // sb->s_root = d_make_root(inode);
-  // if (sb->s_root == NULL) {
-  //   LOG("failed to create root dir\n");
-  //   return -ENOMEM;
-  // }
-  // LOG("srsfs filled sb successfully\n");
+  sb->s_root = d_make_root(inode);
+  if (sb->s_root == NULL) {
+    LOG("failed to create root dir\n");
+    return -ENOMEM;
+  }
+  LOG("srsfs filled sb successfully\n");
   return 0;
 }
 
 static struct dentry* srsfs_mnt(
     struct file_system_type* fs_type, int flags, const char* token, void* data
 ) {
-  return NULL;
-  // struct dentry* ret = mount_nodev(fs_type, flags, data, srsfs_fill_super);
-  // if (ret == NULL)
-  //   LOG("failed to mount\n");
-  // else
-  //   LOG("mounted successfully\n");
-  // return ret;
+  struct dentry* ret = mount_nodev(fs_type, flags, data, srsfs_fill_super);
+  if (ret == NULL)
+    LOG("failed to mount\n");
+  else
+    LOG("mounted successfully\n");
+  return ret;
 }
 
 static void srsfs_kill(struct super_block* sb) {
-  // LOG("killed sb\n");
-}
-
-static void prepare_lists(void) {
-  // init_dir(&rootdir, "srsfs", ALLOC_ID());
+  // TODO: cleanup
+  LOG("killed sb\n");
 }
 
 static void test(void) {
@@ -372,18 +418,17 @@ static void test(void) {
 
 static int __init srsfs_init(void) {
   LOG("SRSFS joined the kernel\n");
-  // prepare_lists();
-  // set_fs_params();
-  // register_filesystem(&srsfs_fs_type);
-  // LOG("SRSFS successfully registered\n");
+  register_filesystem(&srsfs_fs_type);
+  LOG("SRSFS successfully registered\n");
   return 0;
 }
 
 static void __exit srsfs_exit(void) {
   kvfree(rootdir.name);
   rootdir.name = NULL;
-  // unregister_filesystem(&srsfs_fs_type);
-  // LOG("SRSFS unregistered successfully\n");
+  // TODO: cleanup
+  unregister_filesystem(&srsfs_fs_type);
+  LOG("SRSFS unregistered successfully\n");
   // destroy_dir(&rootdir);
   LOG("SRSFS left the kernel\n");
 }
