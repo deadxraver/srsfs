@@ -6,7 +6,7 @@ PWD := $(CURDIR)
 KDIR = /lib/modules/`uname -r`/build
 EXTRA_CFLAGS = -Wall -g
 
-BLK_SZ=16k
+BLK_SZ=160k
 BLK_CNT=160
 
 all:

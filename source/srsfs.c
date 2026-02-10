@@ -75,37 +75,34 @@ static inline struct inode* srsfs_get_inode(struct super_block* sb, struct srsfs
 static int srsfs_link(
     struct dentry* old_dentry, struct inode* parent_dir, struct dentry* new_dentry
 ) {
-  // const char* name = new_dentry->d_name.name;
-  // struct inode* old_inode = d_inode(old_dentry);
-  // struct srsfs_file* old_file = NULL;  // getfile(old_inode->i_ino);
-  // if (S_ISDIR(old_inode->i_mode))
-  //   return -EPERM;
-  // ino_t root = parent_dir->i_ino;
-  // struct srsfs_file* rdir = root == SRSFS_ROOT_ID ? rootdir : getfile(root)->ptr;
-  // for (size_t i = 0; i < SRSFS_DIR_CAP; ++i) {
-  //   if (rdir->content[i].state == UNUSED)
-  //     continue;
-  //   if (strcmp(name, rdir->content[i].name) == 0)
-  //     return -EEXIST;
-  // }
-  // for (size_t i = 0; i < SRSFS_DIR_CAP; ++i) {
-  //   if (rdir->content[i].state == USED)
-  //     continue;
-  //   init_file(rdir->content + i, name, 0);
-  //   strncpy(rdir->content[i].name, name, SRSFS_FILENAME_LEN);
-  //   rdir->content[i].name[SRSFS_FILENAME_LEN - 1] = 0;
-  //   rdir->content[i].sd = old_file->data;
-  //   rdir->content[i].id = old_file->id;
-  //   ++(old_file->data->refcount);
-  //   struct inode* new_inode = srsfs_get_inode(
-  //       &nop_mnt_idmap, parent_dir->i_sb, parent_dir, old_inode->i_mode, old_inode->i_ino
-  //   );
-  //   set_nlink(new_inode, rdir->content[i].sd->refcount);
-  //   set_nlink(old_inode, rdir->content[i].sd->refcount);
-  //   d_instantiate(new_dentry, new_inode);
-  //   return 0;
-  // }
-  return -ENOSPC;
+  const char* name = new_dentry->d_name.name;
+  struct inode* old_inode = d_inode(old_dentry);
+  if (S_ISDIR(old_inode->i_mode))
+    return -EPERM;
+  struct flist* list = &((struct srsfs_inode_info*)parent_dir->i_private)
+      ->dir_content;
+  for (struct flist* node = flist_iterate(list, list);
+      node != NULL; node = flist_iterate(list, node)) {
+          if (strcmp(node->content->name, name) == 0)
+              return -EEXIST;
+      }
+  struct srsfs_file* f = NULL;
+  struct inode* inode = NULL;
+  f = (struct srsfs_file*)kvmalloc(sizeof(*f), GFP_KERNEL);
+  if (f == NULL)
+      goto mem;
+  init_file(f, name, old_inode->i_ino);
+  if (!flist_push(list, f))
+      goto mem;
+  ++(((struct srsfs_inode_info*)old_inode->i_private)->data.refcount);
+  d_add(new_dentry, old_inode);
+  return 0;
+  mem:
+  if (f) {
+      destroy_file(f);
+      kvfree(f);
+  }
+  return -ENOMEM;
 }
 
 static ssize_t srsfs_read(struct file* filp, char* buffer, size_t len, loff_t* offset) {
