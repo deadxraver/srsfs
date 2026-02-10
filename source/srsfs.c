@@ -109,39 +109,18 @@ static int srsfs_link(
 }
 
 static ssize_t srsfs_read(struct file* filp, char* buffer, size_t len, loff_t* offset) {
-  return -1;
-  // struct inode* inode = filp->f_inode;
-  // struct srsfs_file* f = NULL;  // getfile(inode->i_ino);
-  // if (f == NULL)
-  //   return -ENOENT;
-  // if (f->is_dir)
-  //   return -EISDIR;
-  // if (f->data == NULL)
-  //   return -EIO;
-  // struct shared_data* sd = f->data;
-  // loff_t local_offset = *offset;
-  // while (sd != NULL && local_offset >= sd->sz) {
-  //   local_offset -= sd->sz;
-  //   sd = sd->next;
-  // }
-  // if (sd == NULL)
-  //   return 0;
-  // size_t to_read = min(len, sd->sz - local_offset);
-  // if (copy_to_user(buffer, sd->data + local_offset, to_read))
-  //   return -EFAULT;
-  // size_t total_read = to_read;
-  // while (total_read < len && sd->next != NULL) {
-  //   sd = sd->next;
-  //   size_t chunk = min(len - total_read, sd->sz);
-  //   if (chunk == 0)
-  //     break;
-  //   if (copy_to_user(buffer + total_read, sd->data, chunk))
-  //     return -EFAULT;
-  //   total_read += chunk;
-  // }
-
-  // *offset += total_read;
-  // return total_read;
+  struct inode* inode = filp->f_inode;
+  struct srsfs_inode_info* ii = (struct srsfs_inode_info*)inode->i_private;
+  if (ii->is_dir)
+    return -EISDIR;
+  struct shared_data sd = ii->data;
+  if (sd.data == NULL)
+    return 0;  // empty file
+  loff_t local_offset = *offset;
+  size_t to_read = min(sd.sz - local_offset, len);
+  if (copy_to_user(buffer, sd.data + local_offset, to_read))
+    return -EFAULT;
+  return to_read;
 }
 
 static ssize_t srsfs_write(struct file* filp, const char* buffer, size_t len, loff_t* offset) {
@@ -405,27 +384,10 @@ static struct dentry* srsfs_mnt(
 }
 
 static void srsfs_kill(struct super_block* sb) {
+  kvfree(rootdir.name);
+  rootdir.name = NULL;
   // TODO: cleanup
   LOG("killed sb\n");
-}
-
-static void test(void) {
-  // TEST: correct alloc/free and access
-  struct flist list;
-  init_file(&rootdir, "srsfs", ALLOC_ID());
-  flist_init(&list);
-  struct srsfs_file* f = (struct srsfs_file*)kvmalloc(sizeof(*f), GFP_KERNEL);
-  init_file(f, "file1", ALLOC_ID());
-  flist_push(&list, f);
-  f = kvmalloc(sizeof(*f), GFP_KERNEL);
-  init_file(f, "file2", ALLOC_ID());
-  flist_push(&list, f);
-  print_list(&list);
-  while (f = flist_pop(&list)) {
-    destroy_file(f);
-    kvfree(f);
-  }
-  fcnt = SRSFS_ROOT_ID;  // set back
 }
 
 static int __init srsfs_init(void) {
@@ -436,12 +398,9 @@ static int __init srsfs_init(void) {
 }
 
 static void __exit srsfs_exit(void) {
-  kvfree(rootdir.name);
-  rootdir.name = NULL;
   // TODO: cleanup
   unregister_filesystem(&srsfs_fs_type);
   LOG("SRSFS unregistered successfully\n");
-  // destroy_dir(&rootdir);
   LOG("SRSFS left the kernel\n");
 }
 
