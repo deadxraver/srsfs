@@ -96,3 +96,10 @@ struct flist* flist_iterate(struct flist* head, struct flist* cur) {
     return NULL;
   return cur->next;
 }
+
+void sd_init(struct shared_data* sd) {
+  sd->refcount = 1;
+  sd->data = NULL;
+  sd->sz = 0;
+  sd->capacity = 0;
+}

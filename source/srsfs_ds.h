@@ -23,13 +23,13 @@ struct flist {  // NOTE: should be allocated/freed using kvmalloc/kvfree respect
 
 /**
  * Storage for file contents.
+ * Array list structure.
  */
-struct shared_data {  // NOTE: in future versions might be only one node, being reallocated if
-                      // needed to expand
+struct shared_data {
   int refcount;
-  char data[SRSFS_FSIZE];  // <--
+  char* data;
   size_t sz;
-  struct shared_data* next;
+  size_t capacity;
 };
 
 /**
@@ -53,7 +53,7 @@ struct srsfs_inode_info {
   bool is_dir;
   union {
     struct flist dir_content;
-    struct shared_data* data;
+    struct shared_data data;
   };
 };
 

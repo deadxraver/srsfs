@@ -60,8 +60,8 @@ struct inode* srsfs_new_inode(
     flist_init(&ii->dir_content);
     inode->i_fop = &srsfs_dir_ops;
   } else {
+    sd_init(&ii->data);
     inode->i_fop = &srsfs_file_ops;
-    ii->data = NULL;
   }
   inode->i_op = &srsfs_inode_ops;
   inode->i_private = ii;
