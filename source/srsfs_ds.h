@@ -26,7 +26,6 @@ struct flist {  // NOTE: should be allocated/freed using kvmalloc/kvfree respect
  * Array list structure.
  */
 struct shared_data {
-  int refcount;
   char* data;
   size_t sz;
   size_t capacity;

@@ -105,7 +105,6 @@ bool flist_is_empty(struct flist* head) {
 }
 
 void sd_init(struct shared_data* sd) {
-  sd->refcount = 1;
   sd->data = NULL;
   sd->sz = 0;
   sd->capacity = 0;
