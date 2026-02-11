@@ -37,6 +37,40 @@ struct file_operations srsfs_file_ops = {
     .write = srsfs_write,
 };
 
+static void srsfs_inc_rc(struct inode* inode) {
+  if (inode == NULL) {
+    LOG("srsfs_inc_rc: inode is NULL");
+    return;
+  }
+  LOG("0x%lx: rc=%d", inode, inode->i_nlink);
+  inode_inc_link_count(inode);
+  LOG("srsfs_dec_rc: incremented, now %d", inode->i_nlink);
+}
+
+static void srsfs_dec_rc(struct inode* inode) {
+  if (inode == NULL) {
+    LOG("srsfs_dec_rc: inode is NULL");
+    return;
+  }
+  LOG("0x%lx: rc=%d", inode, inode->i_nlink);
+  if (inode->i_nlink <= 1) {
+    if (inode->i_private == NULL)
+      goto done;
+    struct srsfs_inode_info* ii = (struct srsfs_inode_info*)inode->i_private;
+    if (ii->data.data)
+      kvfree(ii->data.data);
+    ii->data.data = NULL;
+    ii->data.sz = 0;
+    ii->data.capacity = 0;
+    kvfree(ii);
+    inode->i_private = NULL;
+    LOG("srsfs_dec_rc: deleted file contents for 0x%lx", inode);
+  }
+done:
+  inode_dec_link_count(inode);
+  LOG("srsfs_dec_rc: decremented");
+}
+
 static struct inode* srsfs_new_inode(
     struct super_block* sb, struct inode* parent, struct srsfs_file* file
 ) {
@@ -79,28 +113,29 @@ static int srsfs_link(
   struct inode* old_inode = d_inode(old_dentry);
   if (S_ISDIR(old_inode->i_mode))
     return -EPERM;
-  struct flist* list = &((struct srsfs_inode_info*)parent_dir->i_private)
-      ->dir_content;
-  for (struct flist* node = flist_iterate(list, list);
-      node != NULL; node = flist_iterate(list, node)) {
-          if (strcmp(node->content->name, name) == 0)
-              return -EEXIST;
-      }
+  struct flist* list = &((struct srsfs_inode_info*)parent_dir->i_private)->dir_content;
+  for (struct flist* node = flist_iterate(list, list); node != NULL;
+       node = flist_iterate(list, node)) {
+    if (strcmp(node->content->name, name) == 0)
+      return -EEXIST;
+  }
+  if (!igrab(old_inode))
+    return -ENOENT;
   struct srsfs_file* f = NULL;
-  struct inode* inode = NULL;
   f = (struct srsfs_file*)kvmalloc(sizeof(*f), GFP_KERNEL);
   if (f == NULL)
-      goto mem;
+    goto mem;
   init_file(f, name, old_inode->i_ino);
   if (!flist_push(list, f))
-      goto mem;
-  ++(((struct srsfs_inode_info*)old_inode->i_private)->data.refcount);
+    goto mem;
+  LOG("new link %s", name);
+  srsfs_inc_rc(old_inode);
   d_add(new_dentry, old_inode);
   return 0;
-  mem:
+mem:
   if (f) {
-      destroy_file(f);
-      kvfree(f);
+    destroy_file(f);
+    kvfree(f);
   }
   return -ENOMEM;
 }
@@ -255,7 +290,6 @@ mem:
 
 static int srsfs_unlink(struct inode* parent_inode, struct dentry* child_dentry) {
   const char* name = child_dentry->d_name.name;
-  ino_t root = parent_inode->i_ino;
   struct srsfs_file* file = NULL;
   struct flist* list = &((struct srsfs_inode_info*)parent_inode->i_private)->dir_content;
   for (struct flist* node = flist_iterate(list, list); node != NULL;
@@ -268,8 +302,10 @@ static int srsfs_unlink(struct inode* parent_inode, struct dentry* child_dentry)
     flist_remove(list, file);
     destroy_file(file);
     kvfree(file);
-    // TODO: clean inode->i_private
     file = NULL;
+    LOG("unlink: d_inode=0x%lx", d_inode(child_dentry));
+    srsfs_dec_rc(d_inode(child_dentry));
+    LOG("deleted %s", name);
     return 0;
   }
   return -ENOENT;
