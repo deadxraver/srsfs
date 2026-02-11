@@ -10,6 +10,7 @@ MODULE_DESCRIPTION("A simple FS kernel module");
 
 static struct srsfs_file rootdir;
 static int fcnt = 0;
+static struct inode* root_inode = NULL;
 
 #define ALLOC_ID() (SRSFS_ROOT_ID + fcnt++)
 
@@ -106,6 +107,45 @@ static struct inode* srsfs_new_inode(
 
 static inline struct inode* srsfs_get_inode(struct super_block* sb, struct srsfs_file* file) {
   return ilookup(sb, file->i_ino);
+}
+
+void srsfs_rec_cleanup(struct inode* inode) {
+  if (inode == NULL)
+    return;
+  LOG("srsfs_rec_cleanup: starting cleanup for 0x%lx", inode);
+  struct srsfs_inode_info* ii = (struct srsfs_inode_info*)inode->i_private;
+  if (ii == NULL) {
+    LOG("srsfs_rec_cleanup: ii already NULL");
+    return;
+  }
+  if (ii->is_dir) {
+    struct flist* list = &ii->dir_content;
+    for (struct srsfs_file* f = flist_pop(list); f != NULL; f = flist_pop(list)) {
+      LOG("srsfs_rec_cleanup: deleting file %s", f->name);
+      struct inode* finode = srsfs_get_inode(inode->i_sb, f);
+      srsfs_rec_cleanup(finode);
+      destroy_file(f);
+      kvfree(f);
+      f = NULL;
+    }
+    LOG("srsfs_rec_cleanup: inode 0x%lx dir contents freed", inode);
+  } else {
+    if (ii->data.data)
+      kvfree(ii->data.data);
+    ii->data.data = NULL;
+    ii->data.sz = 0;
+    ii->data.capacity = 0;
+    LOG("srsfs_rec_cleanup: inode 0x%lx file contents freed", inode);
+  }
+  kvfree(ii);
+  inode->i_private = NULL;
+  LOG("srsfs_rec_cleanup: inode 0x%lx cleared", inode);
+}
+
+void srsfs_cleanup(void) {
+  srsfs_rec_cleanup(root_inode);
+  root_inode = NULL;
+  destroy_file(&rootdir);
 }
 
 static int srsfs_link(
@@ -376,9 +416,9 @@ static int srsfs_rmdir(struct inode* parent_inode, struct dentry* child_dentry) 
 
 static int srsfs_fill_super(struct super_block* sb, void* data, int silent) {
   init_dir(&rootdir, "srsfs", ALLOC_ID());
-  struct inode* inode = srsfs_new_inode(sb, NULL, &rootdir);
+  root_inode = srsfs_new_inode(sb, NULL, &rootdir);
 
-  sb->s_root = d_make_root(inode);
+  sb->s_root = d_make_root(root_inode);
   if (sb->s_root == NULL) {
     LOG("failed to create root dir\n");
     return -ENOMEM;
@@ -399,9 +439,7 @@ static struct dentry* srsfs_mnt(
 }
 
 static void srsfs_kill(struct super_block* sb) {
-  kvfree(rootdir.name);
-  rootdir.name = NULL;
-  // TODO: cleanup
+  srsfs_cleanup();
   LOG("killed sb\n");
 }
 
@@ -413,7 +451,6 @@ static int __init srsfs_init(void) {
 }
 
 static void __exit srsfs_exit(void) {
-  // TODO: cleanup
   unregister_filesystem(&srsfs_fs_type);
   LOG("SRSFS unregistered successfully\n");
   LOG("SRSFS left the kernel\n");
