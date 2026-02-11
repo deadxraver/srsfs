@@ -12,9 +12,13 @@ BLK_CNT=16
 all:
 	make -C $(KDIR) M=$(PWD) modules
 
+server: server/*.cpp
+	mkdir -p build
+	g++ $^ -o build/server
+
 clean:
 	make -C $(KDIR) M=$(PWD) clean
-	rm -rf .cache testtmp
+	rm -rf .cache testtmp build
 
 test: all
 	insmod srsfs.ko
