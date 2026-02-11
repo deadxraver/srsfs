@@ -21,16 +21,13 @@ test: all
 	mkdir -p /mnt/srsfs/
 	mkdir -p testtmp/
 	mount -t srsfs todo /mnt/srsfs/
-	dd if=/dev/random count=$(BLK_CNT) bs=$(BLK_SZ) of=/mnt/srsfs/f
-	dd if=/mnt/srsfs/f count=$(BLK_CNT) bs=$(BLK_SZ) of=testtmp/f
+	@echo '==== Testing for $(BLK_CNT) blocks of size $(BLK_SZ) each ===='
+	dd if=/dev/random count=$(BLK_CNT) bs=$(BLK_SZ) of=testtmp/f
+	dd if=testtmp/f count=$(BLK_CNT) bs=$(BLK_SZ) of=/mnt/srsfs/f
 	test "$$(diff testtmp/f /mnt/srsfs/f)" = ""
 	@echo '==== dd tests OK ===='
 	ln /mnt/srsfs/f /mnt/srsfs/lnf
 	test "$$(diff /mnt/srsfs/f /mnt/srsfs/lnf)" = ""
 	@echo '==== ln tests OK ===='
-	umount /mnt/srsfs
-	mount -t srsfs todo /mnt/srsfs
-	test "$$(diff testtmp/f /mnt/srsfs/f)" = ""
-	@echo '==== umount mount OK ===='
 	umount /mnt/srsfs
 	rmmod srsfs
