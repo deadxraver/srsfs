@@ -93,9 +93,11 @@ static struct inode* srsfs_new_inode(
   if (ii->is_dir) {
     flist_init(&ii->dir_content);
     inode->i_fop = &srsfs_dir_ops;
+    inode->i_size = PAGE_SIZE;
   } else {
     sd_init(&ii->data);
     inode->i_fop = &srsfs_file_ops;
+    inode->i_size = 0;
   }
   inode->i_op = &srsfs_inode_ops;
   inode->i_private = ii;
@@ -189,6 +191,7 @@ static ssize_t srsfs_write(struct file* filp, const char* buffer, size_t len, lo
   if (copy_from_user(sd->data + local_offset, buffer, len))
     return -EFAULT;
   sd->sz = sd->capacity;
+  inode->i_size = sd->sz;
   *offset += len;
 
   return len;
