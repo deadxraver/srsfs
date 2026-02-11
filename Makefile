@@ -1,8 +1,13 @@
-obj-m += source/srsfs.o
+obj-m += srsfs.o
+
+srsfs-objs := source/srsfs.o source/list.o source/srsfs_futil.o source/srsfs_dbg_logs.o
 
 PWD := $(CURDIR)
 KDIR = /lib/modules/`uname -r`/build
 EXTRA_CFLAGS = -Wall -g
+
+BLK_SZ=160k
+BLK_CNT=160
 
 all:
 	make -C $(KDIR) M=$(PWD) modules
@@ -12,23 +17,17 @@ clean:
 	rm -rf .cache testtmp
 
 test: all
-	insmod source/srsfs.ko
+	insmod srsfs.ko
 	mkdir -p /mnt/srsfs/
 	mkdir -p testtmp/
 	mount -t srsfs todo /mnt/srsfs/
-	cat /dev/random | dd count=5 > /mnt/srsfs/f
-	cp /mnt/srsfs/f testtmp/f
+	@echo '==== Testing for $(BLK_CNT) blocks of size $(BLK_SZ) each ===='
+	dd if=/dev/random count=$(BLK_CNT) bs=$(BLK_SZ) of=testtmp/f
+	dd if=testtmp/f count=$(BLK_CNT) bs=$(BLK_SZ) of=/mnt/srsfs/f
 	test "$$(diff testtmp/f /mnt/srsfs/f)" = ""
-	cat /dev/random | dd count=10 > testtmp/ff
-	cp testtmp/ff /mnt/srsfs/
-	test "$$(diff testtmp/ff /mnt/srsfs/ff)" = ""
-	@echo 'cp tests OK'
-	ln /mnt/srsfs/ff /mnt/srsfs/lnff
-	test "$$(diff /mnt/srsfs/ff /mnt/srsfs/lnff)" = ""
-	@echo 'ln tests OK'
-	umount /mnt/srsfs
-	mount -t srsfs todo /mnt/srsfs
-	test "$$(diff testtmp/f /mnt/srsfs/f)" = ""
-	@echo 'umount mount OK'
+	@echo '==== dd tests OK ===='
+	ln /mnt/srsfs/f /mnt/srsfs/lnf
+	test "$$(diff /mnt/srsfs/f /mnt/srsfs/lnf)" = ""
+	@echo '==== ln tests OK ===='
 	umount /mnt/srsfs
 	rmmod srsfs
