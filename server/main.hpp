@@ -28,33 +28,50 @@ struct srsfs_request_package {
     struct {
       ino_t parent_ino;
       int pos;
-    } iterate;
+    } iterate;  // iterate
     struct {
       ino_t parent_ino;
       char name[NET_DATA_SZ];
-    } lcumr;
+    } lcumr;  // lookup/create/unlink/mkdir/rmdir
     struct {
       ino_t parent_ino;
       ino_t target_ino;
       char name[NET_DATA_SZ];
-    } link;
+    } link;  // link
     struct {
       ino_t target_ino;
       size_t len;
       loff_t offset;
       char buffer[NET_DATA_SZ];
-    } rw;
+    } rw;  // read/write
     struct {
-    } ping;
+    } ping;  // ping
   };
 };
 
 struct srsfs_response_package {
   enum srsfs_package_type pt;
   union {
-    // TODO:
     struct {
-    } ping;
+      ino_t i_ino;
+      timespec st_atim;
+      timespec st_mtim;
+      size_t sz;
+    } lcml;  // lookup/create/mkdir/link
+    struct {
+      ino_t i_ino;
+      char name[NET_DATA_SZ];
+      bool is_dir;
+    } iterate;  // iterate
+    struct {
+      size_t bytes_read;
+      char buf[NET_DATA_SZ];
+    } read;
+    struct {
+      size_t bytes_written;
+    } write;
+    struct {
+    } urp;  // inlink/rmdir/ping
   };
   int64_t code;
 };
