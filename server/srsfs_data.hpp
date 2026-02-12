@@ -40,7 +40,7 @@ public:
   Inode();
   Inode(ino_t i_ino, bool is_dir);
   ~Inode();
-  // TODO: override `=`
+  Inode& operator=(const Inode& other);
   bool add_file(const File& f);
   std::string to_string() const;
 };

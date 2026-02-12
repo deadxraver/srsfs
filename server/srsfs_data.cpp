@@ -39,6 +39,25 @@ Inode::~Inode() {
   }
 }
 
+Inode& Inode::operator=(const Inode& other) {
+  this->is_valid_ = other.is_valid_;
+  if (!this->is_valid_)
+    return *this;
+  this->is_dir_ = other.is_dir_;
+  if (other.is_dir_) {
+    this->dir_content_ = new std::vector<File>();
+    for (File f : *other.dir_content_) {
+      this->add_file(f);
+    }
+  } else {
+    this->data_ = new shared_data();
+    this->data_->sz = other.data_->sz;
+    if (this->data_->sz)
+      this->data_->data = new char[this->data_->sz];
+  }
+  return *this;
+}
+
 bool Inode::add_file(const File& f) {
   if (!this->is_dir_)
     return false;
