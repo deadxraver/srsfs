@@ -1,16 +1,14 @@
-#pragma once
+#ifndef _SRSFS_NET_H
 
-#include <netinet/in.h>
-#include <sys/socket.h>
-#include <unistd.h>
+#define _SRSFS_NET_H
 
-#include <cstddef>
-#include <cstdint>
+#include <linux/inet.h>
+#include <linux/net.h>
 
-typedef unsigned long ino_t;
+#define ADDR "127.0.0.1"
 
-#define NET_DATA_SZ 1024
 #define PORT 5955
+#define NET_DATA_SZ 1024
 
 enum srsfs_package_type {
   SRSFS_PING = 0,
@@ -61,3 +59,9 @@ struct srsfs_response_package {
   };
   int64_t code;
 };
+
+int64_t ping(void);
+
+int64_t send_package(const struct srsfs_request_package* reqp, struct srsfs_response_package* resp);
+
+#endif  // !_SRSFS_NET_H

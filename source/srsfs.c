@@ -3,6 +3,7 @@
 #include "list.h"
 #include "srsfs_dbg_logs.h"
 #include "srsfs_futil.h"
+#include "srsfs_net.h"
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("deadxraver");
@@ -415,6 +416,12 @@ static int srsfs_rmdir(struct inode* parent_inode, struct dentry* child_dentry) 
 }
 
 static int srsfs_fill_super(struct super_block* sb, void* data, int silent) {
+  int64_t err = ping();
+  if (err) {
+    LOG("mount: could not ping server, %ld", err);
+    return -EAGAIN;
+  } else
+    LOG("server ping returned OK");
   init_dir(&rootdir, "srsfs", ALLOC_ID());
   root_inode = srsfs_new_inode(sb, NULL, &rootdir);
 
