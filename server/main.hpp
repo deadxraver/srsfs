@@ -4,10 +4,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-#include <cstddef>
-#include <cstdint>
-
-typedef unsigned long ino_t;
+#include "srsfs_data.hpp"
 
 #define NET_DATA_SZ 1024
 #define PORT 5955

@@ -3,14 +3,31 @@
 #include <csignal>
 #include <cstring>
 #include <iostream>
+#include <unordered_map>
 
 int server_socket = -1;
+std::unordered_map<ino_t, Inode> inode_map;
 
 void handle_signal(int) {
   std::cout << "received signal, shutting down..." << std::endl;
   if (server_socket > 0)
     close(server_socket);
   exit(0);
+}
+
+void test_map(void) {
+  File f;
+  f.i_ino = 1001;
+  f.name = "unknown";
+  std::cout << inode_map[1000].to_string() << std::endl;
+  Inode inode(1000, true);
+  std::cout << inode.to_string() << std::endl;
+  inode_map[1000] = inode;
+  std::cout << "inserted new node\n";
+  std::cout << inode_map[1000].to_string() << std::endl;
+  inode_map[1000].add_file(f);
+  std::cout << "inserted new file\n";
+  std::cout << inode_map[1000].to_string() << std::endl;
 }
 
 int main(void) {
@@ -23,6 +40,7 @@ int main(void) {
     std::cerr << "Failed to set signal handler" << std::endl;
     return 1;
   }
+  test_map();
   server_socket = socket(AF_INET, SOCK_STREAM, 0);
   if (server_socket < 0) {
     std::cerr << "Could not create socket" << std::endl;
