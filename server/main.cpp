@@ -24,12 +24,25 @@ int main(void) {
     return 1;
   }
   server_socket = socket(AF_INET, SOCK_STREAM, 0);
+  if (server_socket < 0) {
+    std::cerr << "Could not create socket" << std::endl;
+    return 1;
+  }
   sockaddr_in server_addr;
   server_addr.sin_family = AF_INET;
   server_addr.sin_port = htons(PORT);
   server_addr.sin_addr.s_addr = INADDR_ANY;
-  bind(server_socket, (struct sockaddr*)&server_addr, sizeof(server_addr));
-  listen(server_socket, 5);
+  if (bind(server_socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
+    std::cerr << "Could not bind, probably port " << PORT << " is busy or requires root"
+              << std::endl;
+    close(server_socket);
+    return 1;
+  }
+  if (listen(server_socket, 5) < 0) {
+    std::cerr << "Could not listen" << std::endl;
+    close(server_socket);
+    return 1;
+  }
   while (1) {
     int client_socket = accept(server_socket, nullptr, nullptr);
     if (client_socket < 0)
