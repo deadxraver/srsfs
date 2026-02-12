@@ -1,9 +1,29 @@
 #include "main.hpp"
 
+#include <csignal>
+#include <cstring>
 #include <iostream>
 
+int server_socket = -1;
+
+void handle_signal(int) {
+  std::cout << "received signal, shutting down..." << std::endl;
+  if (server_socket > 0)
+    close(server_socket);
+  exit(0);
+}
+
 int main(void) {
-  int server_socket = socket(AF_INET, SOCK_STREAM, 0);
+  struct sigaction sa;
+  memset(&sa, 0, sizeof(sa));
+  sa.sa_handler = handle_signal;
+  sigemptyset(&sa.sa_mask);
+  sa.sa_flags = 0;
+  if (sigaction(SIGINT, &sa, nullptr) == -1) {
+    std::cerr << "Failed to set signal handler" << std::endl;
+    return 1;
+  }
+  server_socket = socket(AF_INET, SOCK_STREAM, 0);
   sockaddr_in server_addr;
   server_addr.sin_family = AF_INET;
   server_addr.sin_port = htons(PORT);
