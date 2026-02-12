@@ -7,6 +7,7 @@
 
 // kernel types vvv
 typedef unsigned long ino_t;
+#define PAGE_SIZE 4096
 //              ^^^
 
 struct File {
@@ -29,6 +30,7 @@ private:
   bool is_valid_;
   ino_t i_ino_;
   bool is_dir_;
+  size_t sz_;
   union {
     shared_data* data_;
     std::vector<File>* dir_content_;

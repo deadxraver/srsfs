@@ -1,5 +1,7 @@
 #include "srsfs_data.hpp"
 
+#include <ctime>
+
 std::string File::to_string() const {
   return "{i_ino=" + std::to_string(this->i_ino) + ",name=" + this->name + "}";
 }
@@ -23,11 +25,17 @@ Inode::Inode() : is_valid_(false) {
 }
 
 Inode::Inode(ino_t i_ino, bool is_dir) : i_ino_(i_ino), is_dir_(is_dir), is_valid_(true) {
-  if (!is_dir)
+  this->st_atim_.tv_sec = time(NULL);
+  this->st_atim_.tv_nsec = 0;
+  this->st_mtim_.tv_sec = time(NULL);
+  this->st_mtim_.tv_nsec = 0;
+  if (!is_dir) {
     this->data_ = new shared_data();
-  else
+    this->sz_ = 0;
+  } else {
     this->dir_content_ = new std::vector<File>();
-  // TODO: time
+    this->sz_ = PAGE_SIZE;
+  }
 }
 
 Inode::~Inode() {
@@ -43,6 +51,10 @@ Inode& Inode::operator=(const Inode& other) {
   this->is_valid_ = other.is_valid_;
   if (!this->is_valid_)
     return *this;
+  this->sz_ = other.sz_;
+  this->i_ino_ = other.i_ino_;
+  this->st_atim_ = other.st_atim_;
+  this->st_mtim_ = other.st_mtim_;
   this->is_dir_ = other.is_dir_;
   if (other.is_dir_) {
     this->dir_content_ = new std::vector<File>();
@@ -70,8 +82,12 @@ std::string Inode::to_string() const {
     return "INVALID";
   std::string s = "{i_ino=";
   s += std::to_string(this->i_ino_);
-  s += ",is_dir=";
-  s += std::to_string(this->is_dir_);
+  s += ",sz=";
+  s += std::to_string(this->sz_);
+  s += ",atim.s=";
+  s += std::to_string(this->st_atim_.tv_sec);
+  s += ",mtim.s=";
+  s += std::to_string(this->st_mtim_.tv_sec);
   if (this->is_dir_) {
     s += ",dir_content={";
     for (File f : *this->dir_content_)
