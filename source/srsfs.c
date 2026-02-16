@@ -240,38 +240,33 @@ static ssize_t srsfs_write(struct file* filp, const char* buffer, size_t len, lo
 
 static int srsfs_iterate(struct file* filp, struct dir_context* ctx) {
   struct dentry* dentry = filp->f_path.dentry;
-  struct inode* inode = d_inode(dentry);
-  struct inode* parent_inode = d_inode(dentry->d_parent);
-  ino_t ino = inode->i_ino;
-
-  if (ctx->pos == 0) {
-    if (!dir_emit(ctx, ".", 1, ino, DT_DIR))
+  struct srsfs_request_package reqp;
+  struct srsfs_response_package resp;
+  reqp.pt = SRSFS_ITERATE;
+  reqp.iterate.parent_ino = d_inode(dentry->d_parent)->i_ino;
+  while (1) {
+    reqp.iterate.pos = ctx->pos;
+    int64_t err = send_package(&reqp, &resp);
+    if (err < 0) {
+      LOG("lookup: send failed");
+      return err;
+    }
+    if (resp.code) {
+      LOG("server returned %ld", resp.code);
+      return resp.code;
+    }
+    if (resp.iterate.i_ino < SRSFS_ROOT_ID)
+      return 0;
+    if (!dir_emit(
+            ctx,
+            resp.iterate.name,
+            strlen(resp.iterate.name),
+            resp.iterate.i_ino,
+            (resp.iterate.is_dir ? DT_DIR : DT_REG)
+        ))
       return 0;
     ctx->pos++;
   }
-
-  if (ctx->pos == 1) {
-    ino_t parent_ino = parent_inode->i_ino;
-    if (!dir_emit(ctx, "..", 2, parent_ino, DT_DIR))
-      return 0;
-    ctx->pos++;
-  }
-
-  LOG("srsfs_iterate: struct srsfs_inode* i = 0x%lx", filp->f_inode);
-  LOG("srsfs_iterate: struct srsfs_inode_info* ii = 0x%lx", filp->f_inode->i_private);
-  struct flist* list = &((struct srsfs_inode_info*)filp->f_inode->i_private)->dir_content;
-  LOG("ls");
-  print_list(list);
-  for (size_t i = ctx->pos - 2;; ++i) {
-    struct srsfs_file* f = flist_get(list, i);
-    if (f == NULL)
-      break;
-    if (!dir_emit(ctx, f->name, strlen(f->name), f->i_ino, f->is_dir ? DT_DIR : DT_REG))
-      return 0;
-    ctx->pos++;
-  }
-
-  return 0;
 }
 
 static struct dentry* srsfs_lookup(

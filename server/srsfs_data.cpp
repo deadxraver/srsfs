@@ -25,10 +25,8 @@ Inode::Inode() : is_valid_(false) {
 }
 
 Inode::Inode(ino_t i_ino, bool is_dir) : i_ino_(i_ino), is_dir_(is_dir), is_valid_(true) {
-  this->st_atim_.tv_sec = time(NULL);
-  this->st_atim_.tv_nsec = 0;
-  this->st_mtim_.tv_sec = time(NULL);
-  this->st_mtim_.tv_nsec = 0;
+  this->i_atime_sec_ = time(NULL);
+  this->i_mtime_sec_ = time(NULL);
   if (!is_dir) {
     this->data_ = new shared_data();
     this->sz_ = 0;
@@ -53,8 +51,8 @@ Inode& Inode::operator=(const Inode& other) {
     return *this;
   this->sz_ = other.sz_;
   this->i_ino_ = other.i_ino_;
-  this->st_atim_ = other.st_atim_;
-  this->st_mtim_ = other.st_mtim_;
+  this->i_atime_sec_ = other.i_atime_sec_;
+  this->i_mtime_sec_ = other.i_mtime_sec_;
   this->is_dir_ = other.is_dir_;
   if (other.is_dir_) {
     this->dir_content_ = new std::vector<File>();
@@ -130,15 +128,15 @@ File Inode::file_at(int pos) const {
 }
 
 size_t Inode::sz() const {
-    return this->sz_;
+  return this->sz_;
 }
 
-timespec Inode::st_atim() const {
-    return this->st_atim_;
+time64_t Inode::i_atime_sec() const {
+  return this->i_atime_sec_;
 }
 
-timespec Inode::st_mtim() const {
-    return this->st_mtim_;
+time64_t Inode::i_mtime_sec() const {
+  return this->i_mtime_sec_;
 }
 
 std::string Inode::to_string() const {
@@ -148,10 +146,6 @@ std::string Inode::to_string() const {
   s += std::to_string(this->i_ino_);
   s += ",sz=";
   s += std::to_string(this->sz_);
-  s += ",atim.s=";
-  s += std::to_string(this->st_atim_.tv_sec);
-  s += ",mtim.s=";
-  s += std::to_string(this->st_mtim_.tv_sec);
   if (this->is_dir_) {
     s += ",dir_content={";
     for (File f : *this->dir_content_)

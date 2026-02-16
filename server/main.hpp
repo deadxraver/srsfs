@@ -54,8 +54,8 @@ struct srsfs_response_package {
   union {
     struct {
       ino_t i_ino;
-      timespec st_atim;
-      timespec st_mtim;
+      time64_t i_atime_sec;
+      time64_t i_mtime_sec;
       size_t sz;
     } lcml;  // lookup/create/mkdir/link
     struct {

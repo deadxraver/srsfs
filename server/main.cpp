@@ -118,8 +118,8 @@ int main(void) {
         }
         resp.lcml.i_ino = f.i_ino;
         resp.lcml.sz = inode_map[f.i_ino].sz();
-        resp.lcml.st_atim = inode_map[f.i_ino].st_atim();
-        resp.lcml.st_mtim = inode_map[f.i_ino].st_mtim();
+        resp.lcml.i_atime_sec = inode_map[f.i_ino].i_atime_sec();
+        resp.lcml.i_mtime_sec = inode_map[f.i_ino].i_mtime_sec();
         resp.code = 0;
         break;
       case SRSFS_CREATE:
@@ -146,8 +146,8 @@ int main(void) {
         inode_map[f.i_ino] = Inode(f.i_ino, false);
         resp.lcml.i_ino = f.i_ino;
         resp.lcml.sz = inode_map[f.i_ino].sz();
-        resp.lcml.st_atim = inode_map[f.i_ino].st_atim();
-        resp.lcml.st_mtim = inode_map[f.i_ino].st_mtim();
+        resp.lcml.i_atime_sec = inode_map[f.i_ino].i_atime_sec();
+        resp.lcml.i_mtime_sec = inode_map[f.i_ino].i_mtime_sec();
         resp.code = 0;
         break;
       case SRSFS_UNLINK:
@@ -201,8 +201,8 @@ int main(void) {
         resp.code = 0;
         resp.lcml.i_ino = f.i_ino;
         resp.lcml.sz = inode_map[f.i_ino].sz();
-        resp.lcml.st_atim = inode_map[f.i_ino].st_atim();
-        resp.lcml.st_mtim = inode_map[f.i_ino].st_mtim();
+        resp.lcml.i_atime_sec = inode_map[f.i_ino].i_atime_sec();
+        resp.lcml.i_mtime_sec = inode_map[f.i_ino].i_mtime_sec();
         resp.code = 0;
         break;
       case SRSFS_RMDIR:
@@ -257,8 +257,8 @@ int main(void) {
         resp.code = 0;
         resp.lcml.i_ino = f.i_ino;
         resp.lcml.sz = inode_map[f.i_ino].sz();
-        resp.lcml.st_atim = inode_map[f.i_ino].st_atim();
-        resp.lcml.st_mtim = inode_map[f.i_ino].st_mtim();
+        resp.lcml.i_atime_sec = inode_map[f.i_ino].i_atime_sec();
+        resp.lcml.i_mtime_sec = inode_map[f.i_ino].i_mtime_sec();
         resp.code = 0;
         break;
       case SRSFS_READ:

@@ -7,6 +7,7 @@
 
 // kernel space types & defines vvv
 typedef unsigned long ino_t;
+typedef long time64_t;
 #define PAGE_SIZE 4096
 #define SRSFS_ROOT_ID 1000
 //              ^^^
@@ -36,8 +37,8 @@ private:
     shared_data* data_;
     std::vector<File>* dir_content_;
   };
-  timespec st_atim_;
-  timespec st_mtim_;
+  time64_t i_atime_sec_;
+  time64_t i_mtime_sec_;
 
 public:
   Inode();
@@ -51,8 +52,8 @@ public:
   bool is_valid() const;
   bool is_dir() const;
   size_t sz() const;
-  timespec st_atim() const;
-  timespec st_mtim() const;
+  time64_t i_atime_sec() const;
+  time64_t i_mtime_sec() const;
   File file_at(int pos) const;
   std::string to_string() const;
 };
