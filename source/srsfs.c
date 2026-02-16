@@ -294,8 +294,30 @@ static int srsfs_create(
     umode_t mode,
     bool b
 ) {
+  struct srsfs_request_package reqp;
+  struct srsfs_response_package resp;
+  reqp.pt = SRSFS_CREATE;
   const char* name = child_dentry->d_name.name;
-  struct srsfs_inode_info* ii = (struct srsfs_inode_info*)parent_inode->i_private;
+  strcpy(reqp.lcumr.name, name);
+  reqp.lcumr.parent_ino = parent_inode->i_ino;
+  int64_t err = send_package(&reqp, &resp);
+  if (err) {
+    LOG("send finished with error %ld", err);
+    return -EAGAIN;
+  }
+  if (resp.code) {
+    LOG("recieved error code %ld", resp.code);
+    return resp.code;
+  }
+  struct inode* inode = new_inode(parent_inode->i_sb);
+  inode->i_ino = resp.lcml.i_ino;
+  inode->i_atime_sec = resp.lcml.i_atime_sec;
+  inode->i_mtime_sec = resp.lcml.i_mtime_sec;
+  inode->i_size = resp.lcml.sz;
+  d_add(child_dentry, inode);
+  LOG("Success.");
+  return 0;
+  /*struct srsfs_inode_info* ii = (struct srsfs_inode_info*)parent_inode->i_private;
   struct flist* list = &ii->dir_content;
   LOG("starting srsfs_create...");
   print_list(list);
@@ -325,6 +347,7 @@ mem:
     kvfree(f);
   }
   return -ENOMEM;
+  */
 }
 
 static int srsfs_unlink(struct inode* parent_inode, struct dentry* child_dentry) {
