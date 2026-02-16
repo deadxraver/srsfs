@@ -57,6 +57,7 @@ struct srsfs_response_package {
       time64_t i_atime_sec;
       time64_t i_mtime_sec;
       size_t sz;
+      bool is_dir;
     } lcml;  // lookup/create/mkdir/link
     struct {
       ino_t i_ino;

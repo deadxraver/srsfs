@@ -272,18 +272,30 @@ static int srsfs_iterate(struct file* filp, struct dir_context* ctx) {
 static struct dentry* srsfs_lookup(
     struct inode* parent_inode, struct dentry* child_dentry, unsigned int flag
 ) {
-  struct srsfs_inode_info* ii = (struct srsfs_inode_info*)parent_inode->i_private;
-  struct flist* list = &ii->dir_content;
+  struct srsfs_request_package reqp;
+  struct srsfs_response_package resp;
   const char* name = child_dentry->d_name.name;
-  for (struct flist* node = flist_iterate(list, list); node != NULL;
-       node = flist_iterate(list, node)) {
-    struct srsfs_file* f = node->content;
-    if (strcmp(f->name, name))
-      continue;
-    struct inode* inode = srsfs_get_inode(parent_inode->i_sb, f);
-    d_add(child_dentry, inode);
+  reqp.pt = SRSFS_LOOKUP;
+  strcpy(reqp.lcumr.name, name);
+  reqp.lcumr.parent_ino = parent_inode->i_ino;
+  int64_t res = send_package(&reqp, &resp);
+  if (res) {
+    LOG("srsfs_lookup: send error: %ld", res);
     return NULL;
   }
+  if (resp.code) {
+    LOG("srsfs_lookup: server responded with error %ld", resp.code);
+    return NULL;
+  }
+  struct inode* inode = new_inode(parent_inode->i_sb);
+  inode->i_ino = resp.lcml.i_ino;
+  inode->i_atime_sec = resp.lcml.i_atime_sec;
+  inode->i_mtime_sec = resp.lcml.i_mtime_sec;
+  inode->i_size = resp.lcml.sz;
+  inode_init_owner(
+      &nop_mnt_idmap, inode, parent_inode, (resp.lcml.is_dir ? S_IFDIR : S_IFREG) | S_IRWXUGO
+  );
+  d_add(child_dentry, inode);
   return NULL;
 }
 
@@ -310,6 +322,7 @@ static int srsfs_create(
     return resp.code;
   }
   struct inode* inode = new_inode(parent_inode->i_sb);
+  inode_init_owner(&nop_mnt_idmap, inode, parent_inode, S_IFREG | S_IRWXUGO);
   inode->i_ino = resp.lcml.i_ino;
   inode->i_atime_sec = resp.lcml.i_atime_sec;
   inode->i_mtime_sec = resp.lcml.i_mtime_sec;
@@ -317,37 +330,6 @@ static int srsfs_create(
   d_add(child_dentry, inode);
   LOG("Success.");
   return 0;
-  /*struct srsfs_inode_info* ii = (struct srsfs_inode_info*)parent_inode->i_private;
-  struct flist* list = &ii->dir_content;
-  LOG("starting srsfs_create...");
-  print_list(list);
-  for (struct flist* node = flist_iterate(list, list); node != NULL;
-       node = flist_iterate(list, node)) {
-    if (strcmp(node->content->name, name) == 0)
-      return -EEXIST;
-  }
-  struct srsfs_file* f = NULL;
-  struct inode* inode = NULL;
-  f = (struct srsfs_file*)kvmalloc(sizeof(struct srsfs_file), GFP_KERNEL);
-  if (f == NULL)
-    goto mem;
-  init_file(f, name, ALLOC_ID());
-  inode = srsfs_new_inode(NULL, parent_inode, f);
-  if (inode == NULL)
-    goto mem;
-  if (!flist_push(list, f))
-    goto mem;
-  d_add(child_dentry, inode);
-  LOG("Success.");
-  print_list(list);
-  return 0;
-mem:
-  if (f) {
-    destroy_file(f);
-    kvfree(f);
-  }
-  return -ENOMEM;
-  */
 }
 
 static int srsfs_unlink(struct inode* parent_inode, struct dentry* child_dentry) {
@@ -440,7 +422,7 @@ static int srsfs_fill_super(struct super_block* sb, void* data, int silent) {
     return -EAGAIN;
   } else
     LOG("server ping returned OK");
-  init_dir(&rootdir, "srsfs", ALLOC_ID());
+  init_dir(&rootdir, "srsfs", SRSFS_ROOT_ID);
   root_inode = srsfs_new_inode(sb, NULL, &rootdir);
 
   sb->s_root = d_make_root(root_inode);

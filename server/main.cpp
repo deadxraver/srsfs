@@ -130,6 +130,7 @@ int main(void) {
         resp.lcml.sz = inode_map[f.i_ino].sz();
         resp.lcml.i_atime_sec = inode_map[f.i_ino].i_atime_sec();
         resp.lcml.i_mtime_sec = inode_map[f.i_ino].i_mtime_sec();
+        resp.lcml.is_dir = inode_map[f.i_ino].is_dir();
         resp.code = 0;
         break;
       case SRSFS_CREATE:
