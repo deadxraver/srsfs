@@ -243,13 +243,15 @@ static int srsfs_iterate(struct file* filp, struct dir_context* ctx) {
   struct srsfs_request_package reqp;
   struct srsfs_response_package resp;
   reqp.pt = SRSFS_ITERATE;
-  reqp.iterate.parent_ino = d_inode(dentry->d_parent)->i_ino;
+  reqp.iterate.parent_ino = d_inode(dentry)->i_ino;
+  if (!dir_emit_dots(filp, ctx))
+    return 0;
   while (1) {
-    reqp.iterate.pos = ctx->pos;
+    reqp.iterate.pos = ctx->pos - 2;
     int64_t err = send_package(&reqp, &resp);
     if (err < 0) {
       LOG("lookup: send failed");
-      return err;
+      return -EAGAIN;
     }
     if (resp.code) {
       LOG("server returned %ld", resp.code);
@@ -281,20 +283,30 @@ static struct dentry* srsfs_lookup(
   int64_t res = send_package(&reqp, &resp);
   if (res) {
     LOG("srsfs_lookup: send error: %ld", res);
-    return NULL;
+    return ERR_PTR(res);
   }
   if (resp.code) {
     LOG("srsfs_lookup: server responded with error %ld", resp.code);
+    LOG("srsfs_lookup: tried to find: %s", name);
     return NULL;
   }
-  struct inode* inode = new_inode(parent_inode->i_sb);
+  struct inode* inode = NULL;  // ilookup(parent_inode->i_sb, resp.lcml.i_ino);
+  if (inode == NULL) {
+    inode = new_inode(parent_inode->i_sb);
+    inode_init_owner(
+        &nop_mnt_idmap, inode, parent_inode, (resp.lcml.is_dir ? S_IFDIR : S_IFREG) | S_IRWXUGO
+    );
+    inode->i_op = &srsfs_inode_ops;
+    if (resp.lcml.is_dir) {
+      inode->i_fop = &srsfs_dir_ops;
+      set_nlink(inode, 2);
+    } else
+      inode->i_fop = &srsfs_file_ops;
+  }
   inode->i_ino = resp.lcml.i_ino;
   inode->i_atime_sec = resp.lcml.i_atime_sec;
   inode->i_mtime_sec = resp.lcml.i_mtime_sec;
   inode->i_size = resp.lcml.sz;
-  inode_init_owner(
-      &nop_mnt_idmap, inode, parent_inode, (resp.lcml.is_dir ? S_IFDIR : S_IFREG) | S_IRWXUGO
-  );
   d_add(child_dentry, inode);
   return NULL;
 }
@@ -322,11 +334,13 @@ static int srsfs_create(
     return resp.code;
   }
   struct inode* inode = new_inode(parent_inode->i_sb);
-  inode_init_owner(&nop_mnt_idmap, inode, parent_inode, S_IFREG | S_IRWXUGO);
   inode->i_ino = resp.lcml.i_ino;
   inode->i_atime_sec = resp.lcml.i_atime_sec;
   inode->i_mtime_sec = resp.lcml.i_mtime_sec;
   inode->i_size = resp.lcml.sz;
+  inode->i_fop = &srsfs_file_ops;
+  inode->i_op = &srsfs_inode_ops;
+  inode_init_owner(idmap, inode, parent_inode, S_IFREG | S_IRWXUGO);
   d_add(child_dentry, inode);
   LOG("Success.");
   return 0;
@@ -355,36 +369,32 @@ static int srsfs_unlink(struct inode* parent_inode, struct dentry* child_dentry)
 static int srsfs_mkdir(
     struct mnt_idmap* idmap, struct inode* parent_inode, struct dentry* child_dentry, umode_t mode
 ) {
+  struct srsfs_request_package reqp;
+  struct srsfs_response_package resp;
+  reqp.pt = SRSFS_MKDIR;
   const char* name = child_dentry->d_name.name;
-  struct srsfs_file* dir = NULL;
-  struct inode* inode = NULL;
-  struct flist* parent_dir = &((struct srsfs_inode_info*)parent_inode->i_private)->dir_content;
-  for (struct flist* node = flist_iterate(parent_dir, parent_dir); node != NULL;
-       node = flist_iterate(parent_dir, node)) {
-    struct srsfs_file* f = node->content;
-    if (strcmp(f->name, name) == 0)
-      return -EEXIST;
+  strcpy(reqp.lcumr.name, name);
+  reqp.lcumr.parent_ino = parent_inode->i_ino;
+  int64_t err = send_package(&reqp, &resp);
+  if (err) {
+    LOG("mkdir: send finished with error %ld", err);
+    return -EAGAIN;
   }
-  dir = (struct srsfs_file*)kvmalloc(sizeof(*dir), GFP_KERNEL);
-  if (dir == NULL)
-    goto mem;
-  init_dir(dir, name, ALLOC_ID());
-  inode = srsfs_new_inode(NULL, parent_inode, dir);
-  if (inode == NULL)
-    goto mem;
-  if (!flist_push(parent_dir, dir))
-    goto mem;
+  if (resp.code) {
+    LOG("mkdir: recieved error code %ld", resp.code);
+    return resp.code;
+  }
+  struct inode* inode = new_inode(parent_inode->i_sb);
+  inode->i_ino = resp.lcml.i_ino;
+  inode->i_atime_sec = resp.lcml.i_atime_sec;
+  inode->i_mtime_sec = resp.lcml.i_mtime_sec;
+  inode->i_size = resp.lcml.sz;
+  inode->i_fop = &srsfs_dir_ops;
+  inode->i_op = &srsfs_inode_ops;
+  inode_init_owner(idmap, inode, parent_inode, S_IFDIR | S_IRWXUGO);
   d_add(child_dentry, inode);
-  LOG("Successfully created dir %s", dir->name);
-  print_list(parent_dir);
+  LOG("Success.");
   return 0;
-mem:
-  if (dir != NULL) {
-    destroy_file(dir);
-    kvfree(dir);
-    dir = NULL;
-  }
-  return -ENOMEM;
 }
 
 static int srsfs_rmdir(struct inode* parent_inode, struct dentry* child_dentry) {

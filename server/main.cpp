@@ -113,6 +113,7 @@ int main(void) {
         // TODO: validation
         parent_inode = inode_map[parent_ino];
         if (!parent_inode.is_valid()) {
+          std::cout << "lookup: dir with ino " << parent_ino << " is invalid\n";
           resp.code = -ENOENT;
           break;
         }
@@ -190,11 +191,13 @@ int main(void) {
         resp.code = 0;
         break;
       case SRSFS_MKDIR:
+        std::cout << "got mkdir request from client" << std::endl;
         resp.pt = SRSFS_MKDIR;
         parent_ino = reqp.lcumr.parent_ino;
         name = std::string(reqp.lcumr.name);
         parent_inode = inode_map[parent_ino];
         if (!parent_inode.is_valid()) {
+          std::cout << "parent dir with ino " << parent_ino << " is invalid\n";
           resp.code = -ENOENT;
           break;
         }

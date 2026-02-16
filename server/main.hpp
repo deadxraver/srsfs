@@ -47,7 +47,7 @@ struct srsfs_request_package {
     struct {
     } ping;  // ping
   };
-};
+} __attribute__((packed));
 
 struct srsfs_response_package {
   enum srsfs_package_type pt;
@@ -75,4 +75,4 @@ struct srsfs_response_package {
     } urp;  // inlink/rmdir/ping
   };
   int64_t code;
-};
+} __attribute__((packed));
