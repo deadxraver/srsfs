@@ -172,8 +172,8 @@ int main(void) {
           resp.code = -ENOENT;
           break;
         }
-        if (parent_inode.is_dir()) {
-          resp.code = -EISDIR;
+        if (!parent_inode.is_dir()) {
+          resp.code = -ENOTDIR;
           break;
         }
         while (1) {

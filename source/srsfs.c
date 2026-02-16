@@ -333,26 +333,23 @@ static int srsfs_create(
 }
 
 static int srsfs_unlink(struct inode* parent_inode, struct dentry* child_dentry) {
+  struct srsfs_request_package reqp;
+  struct srsfs_response_package resp;
+  reqp.pt = SRSFS_UNLINK;
   const char* name = child_dentry->d_name.name;
-  struct srsfs_file* file = NULL;
-  struct flist* list = &((struct srsfs_inode_info*)parent_inode->i_private)->dir_content;
-  for (struct flist* node = flist_iterate(list, list); node != NULL;
-       node = flist_iterate(list, node)) {
-    file = node->content;
-    if (strcmp(file->name, name))
-      continue;
-    if (file->is_dir)
-      return -EISDIR;
-    flist_remove(list, file);
-    destroy_file(file);
-    kvfree(file);
-    file = NULL;
-    LOG("unlink: d_inode=0x%lx", d_inode(child_dentry));
-    srsfs_dec_rc(d_inode(child_dentry));
-    LOG("deleted %s", name);
-    return 0;
+  strcpy(reqp.lcumr.name, name);
+  reqp.lcumr.parent_ino = parent_inode->i_ino;
+  int64_t err = send_package(&reqp, &resp);
+  if (err) {
+    LOG("send finished with error %ld", err);
+    return -EAGAIN;
   }
-  return -ENOENT;
+  if (resp.code) {
+    LOG("recieved error code %ld", resp.code);
+    return resp.code;
+  }
+  LOG("Success.");
+  return 0;
 }
 
 static int srsfs_mkdir(
