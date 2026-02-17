@@ -51,7 +51,8 @@ public:
   ino_t delete_file(const std::string& fname);
   void dec_refs();
   void inc_refs();
-  size_t write(char* data, size_t len, loff_t offset);
+  size_t write(const char* data, size_t len, loff_t offset);
+  size_t read(char* buffer, size_t len, loff_t offset) const;
   bool is_valid() const;
   bool is_dir() const;
   size_t sz() const;

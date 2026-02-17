@@ -111,7 +111,7 @@ void Inode::inc_refs() {
   ++(this->data_->refcount);
 }
 
-size_t Inode::write(char* data, size_t len, loff_t offset) {
+size_t Inode::write(const char* data, size_t len, loff_t offset) {
   shared_data* sd = this->data_;
   len = std::min(len, (size_t)NET_DATA_SZ);
   if (sd->sz < len + offset) {
@@ -124,6 +124,13 @@ size_t Inode::write(char* data, size_t len, loff_t offset) {
   memcpy(sd->data + offset, data, len);
   this->sz_ = len + offset;
   return len;
+}
+
+size_t Inode::read(char* buffer, size_t len, loff_t offset) const {
+  shared_data* sd = this->data_;
+  size_t to_read = std::min(len, this->sz_ - offset);
+  memcpy(buffer, sd->data + offset, to_read);
+  return to_read;
 }
 
 bool Inode::is_valid() const {

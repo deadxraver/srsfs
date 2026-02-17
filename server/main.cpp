@@ -287,10 +287,21 @@ int main(void) {
         resp.code = 0;
         break;
       case SRSFS_READ:
-        std::cout << "read not implemented yet\n";
         resp.pt = SRSFS_READ;
-        resp.code = -EPERM;
-        // TODO:
+        i_ino = reqp.rw.target_ino;
+        target_inode = inode_map[i_ino];
+        if (!target_inode.is_valid()) {
+          resp.code = -ENOENT;
+          break;
+        }
+        if (target_inode.is_dir()) {
+          resp.code = -EISDIR;
+          break;
+        }
+        resp.read.bytes_read = inode_map[i_ino].read(
+            resp.read.buf, std::min(reqp.rw.len, (size_t)NET_DATA_SZ), reqp.rw.offset
+        );
+        resp.code = 0;
         break;
       case SRSFS_WRITE:
         resp.pt = SRSFS_WRITE;

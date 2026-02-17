@@ -72,27 +72,26 @@ static int srsfs_link(
 }
 
 static ssize_t srsfs_read(struct file* filp, char* buffer, size_t len, loff_t* offset) {
-  // struct inode* inode = filp->f_inode;
-  // struct srsfs_inode_info* ii = (struct srsfs_inode_info*)inode->i_private;
-  // if (ii->is_dir)
-  //   return -EISDIR;
-  // struct shared_data* sd = &ii->data;
-  // LOG("sd->data addr: 0x%lx", sd->data);
-  // if (sd->data == NULL)
-  //   return 0;  // empty file
-  // loff_t local_offset = *offset;
-  // size_t to_read = min(sd->sz - local_offset, len);
-  // LOG("srsfs_read: sd->sz=%ld,sd->cap=%ld,len=%ld,off=%ld,to_read=%ld",
-  //     sd->sz,
-  //     sd->capacity,
-  //     len,
-  //     local_offset,
-  //     to_read);
-  // if (copy_to_user(buffer, sd->data + local_offset, to_read))
-  //   return -EFAULT;
-  // *offset += to_read;
-  // return to_read;
-  return -ENOSPC;
+  struct srsfs_request_package reqp;
+  struct srsfs_response_package resp;
+  reqp.pt = SRSFS_READ;
+  struct inode* inode = filp->f_inode;
+  reqp.rw.target_ino = inode->i_ino;
+  reqp.rw.len = min(len, NET_DATA_SZ);
+  reqp.rw.offset = *offset;
+  int64_t err = send_package(&reqp, &resp);
+  if (err) {
+    LOG("read: send failed: %ld", err);
+    return -EAGAIN;
+  }
+  if (resp.code) {
+    LOG("read: server responded with error code %ld", resp.code);
+    return resp.code;
+  }
+  if (copy_to_user(buffer, resp.read.buf, resp.read.bytes_read))
+    return -EFAULT;
+  *offset += resp.read.bytes_read;
+  return resp.read.bytes_read;
 }
 
 static ssize_t srsfs_write(struct file* filp, const char* buffer, size_t len, loff_t* offset) {
