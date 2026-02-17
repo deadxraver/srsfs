@@ -256,6 +256,7 @@ int main(void) {
         resp.pt = SRSFS_LINK;
         parent_ino = reqp.link.parent_ino;
         target_ino = reqp.link.target_ino;
+        link_name = std::string(reqp.link.name);
         parent_inode = inode_map[parent_ino];
         target_inode = inode_map[target_ino];
         if (!parent_inode.is_valid() || !target_inode.is_valid()) {
@@ -264,10 +265,10 @@ int main(void) {
         }
         while (1) {
           f = parent_inode.file_at(i++);
-          if (f.i_ino < SRSFS_ROOT_ID || f.name == name)
+          if (f.i_ino < SRSFS_ROOT_ID || f.name == link_name)
             break;
         }
-        if (f.name == name) {
+        if (f.name == link_name) {
           resp.code = -EEXIST;
           break;
         }

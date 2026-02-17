@@ -152,35 +152,33 @@ void srsfs_cleanup(void) {
 static int srsfs_link(
     struct dentry* old_dentry, struct inode* parent_dir, struct dentry* new_dentry
 ) {
+  struct srsfs_request_package reqp;
+  struct srsfs_response_package resp;
+  reqp.pt = SRSFS_LINK;
   const char* name = new_dentry->d_name.name;
-  struct inode* old_inode = d_inode(old_dentry);
-  if (S_ISDIR(old_inode->i_mode))
-    return -EPERM;
-  struct flist* list = &((struct srsfs_inode_info*)parent_dir->i_private)->dir_content;
-  for (struct flist* node = flist_iterate(list, list); node != NULL;
-       node = flist_iterate(list, node)) {
-    if (strcmp(node->content->name, name) == 0)
-      return -EEXIST;
+  strcpy(reqp.link.name, name);
+  reqp.link.parent_ino = parent_dir->i_ino;
+  reqp.link.target_ino = d_inode(old_dentry)->i_ino;
+  int64_t err = send_package(&reqp, &resp);
+  if (err) {
+    LOG("send finished with error %ld", err);
+    return -EAGAIN;
   }
-  if (!igrab(old_inode))
-    return -ENOENT;
-  struct srsfs_file* f = NULL;
-  f = (struct srsfs_file*)kvmalloc(sizeof(*f), GFP_KERNEL);
-  if (f == NULL)
-    goto mem;
-  init_file(f, name, old_inode->i_ino);
-  if (!flist_push(list, f))
-    goto mem;
-  LOG("new link %s", name);
-  srsfs_inc_rc(old_inode);
-  d_add(new_dentry, old_inode);
+  if (resp.code) {
+    LOG("link: recieved error code %ld", resp.code);
+    return resp.code;
+  }
+  struct inode* inode = new_inode(parent_dir->i_sb);
+  inode->i_ino = resp.lcml.i_ino;
+  inode->i_atime_sec = resp.lcml.i_atime_sec;
+  inode->i_mtime_sec = resp.lcml.i_mtime_sec;
+  inode->i_size = resp.lcml.sz;
+  inode->i_fop = &srsfs_file_ops;
+  inode->i_op = &srsfs_inode_ops;
+  inode_init_owner(&nop_mnt_idmap, inode, parent_dir, S_IFREG | S_IRWXUGO);
+  d_add(new_dentry, inode);
+  LOG("Success.");
   return 0;
-mem:
-  if (f) {
-    destroy_file(f);
-    kvfree(f);
-  }
-  return -ENOMEM;
 }
 
 static ssize_t srsfs_read(struct file* filp, char* buffer, size_t len, loff_t* offset) {
