@@ -234,7 +234,6 @@ int main(void) {
           resp.code = -ENOTDIR;
           break;
         }
-        // TODO: check if empty
         while (1) {
           f = parent_inode.file_at(i++);
           if (f.i_ino < SRSFS_ROOT_ID || f.name == name)
@@ -242,6 +241,11 @@ int main(void) {
         }
         if (f.i_ino < SRSFS_ROOT_ID) {
           resp.code = -ENOENT;
+          break;
+        }
+        if (!inode_map[f.i_ino].is_dir() || inode_map[f.i_ino].file_at(0).i_ino >= SRSFS_ROOT_ID) {
+          // has contents
+          resp.code = -EPERM;
           break;
         }
         i_ino = inode_map[parent_ino].delete_file(f.name);

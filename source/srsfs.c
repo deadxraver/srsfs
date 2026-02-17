@@ -398,28 +398,23 @@ static int srsfs_mkdir(
 }
 
 static int srsfs_rmdir(struct inode* parent_inode, struct dentry* child_dentry) {
+  struct srsfs_request_package reqp;
+  struct srsfs_response_package resp;
+  reqp.pt = SRSFS_RMDIR;
   const char* name = child_dentry->d_name.name;
-  struct flist* list = &((struct srsfs_inode_info*)parent_inode->i_private)->dir_content;
-  for (struct flist* node = flist_iterate(list, list); node != NULL;
-       node = flist_iterate(list, node)) {
-    struct srsfs_file* f = node->content;
-    if (strcmp(name, f->name))
-      continue;
-    if (!f->is_dir)
-      return -ENOTDIR;
-    struct inode* dir_inode = d_inode(child_dentry);
-    if (dir_inode == NULL) {
-      LOG("Failed to get inode for %d %s", f->i_ino, f->name);
-      return -EINVAL;
-    }
-    if (!flist_is_empty(&((struct srsfs_inode_info*)dir_inode->i_private)->dir_content))
-      return -EPERM;
-    flist_remove(list, f);
-    destroy_file(f);
-    kvfree(f);
-    return 0;
+  strcpy(reqp.lcumr.name, name);
+  reqp.lcumr.parent_ino = parent_inode->i_ino;
+  int64_t err = send_package(&reqp, &resp);
+  if (err) {
+    LOG("send finished with error %ld", err);
+    return -EAGAIN;
   }
-  return -ENOENT;
+  if (resp.code) {
+    LOG("recieved error code %ld", resp.code);
+    return resp.code;
+  }
+  LOG("Success.");
+  return 0;
 }
 
 static int srsfs_fill_super(struct super_block* sb, void* data, int silent) {
