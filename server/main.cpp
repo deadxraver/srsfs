@@ -19,14 +19,6 @@ void handle_signal(int) {
   exit(0);
 }
 
-void test_data(void) {
-  File f;
-  f.i_ino = ALLOC_INO();
-  f.name = "test_file";
-  inode_map[SRSFS_ROOT_ID].add_file(f);
-  Inode inode(f.i_ino, false);
-}
-
 int main(void) {
   struct sigaction sa;
   memset(&sa, 0, sizeof(sa));
@@ -40,7 +32,6 @@ int main(void) {
   rootdir.i_ino = ALLOC_INO();
   rootdir.name = "srsfs";
   inode_map[rootdir.i_ino] = Inode(rootdir.i_ino, true);
-  test_data();
   server_socket = socket(AF_INET, SOCK_STREAM, 0);
   if (server_socket < 0) {
     std::cerr << "Could not create socket" << std::endl;
@@ -279,6 +270,7 @@ int main(void) {
         f.i_ino = target_ino;
         f.name = link_name;
         inode_map[parent_ino].add_file(f);
+        inode_map[target_ino].inc_refs();
         resp.code = 0;
         resp.lcml.i_ino = f.i_ino;
         resp.lcml.sz = inode_map[f.i_ino].sz();
