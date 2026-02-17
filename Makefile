@@ -6,8 +6,8 @@ PWD := $(CURDIR)
 KDIR = /lib/modules/`uname -r`/build
 EXTRA_CFLAGS = -Wall -g
 
-BLK_SZ=16M
-BLK_CNT=16
+BLK_SZ=1025
+BLK_CNT=160
 
 all:
 	make -C $(KDIR) M=$(PWD) modules
@@ -21,10 +21,12 @@ clean:
 	rm -rf .cache testtmp build
 
 test: all
+	# NOTE: server is not started automatically,
+	# should be managed manually
 	insmod srsfs.ko
 	mkdir -p /mnt/srsfs/
 	mkdir -p testtmp/
-	mount -t srsfs todo /mnt/srsfs/
+	mount -t srsfs none /mnt/srsfs/
 	@echo '==== Testing for $(BLK_CNT) blocks of size $(BLK_SZ) each ===='
 	dd if=/dev/random count=$(BLK_CNT) bs=$(BLK_SZ) of=testtmp/f
 	dd if=testtmp/f count=$(BLK_CNT) bs=$(BLK_SZ) of=/mnt/srsfs/f
@@ -33,5 +35,9 @@ test: all
 	ln /mnt/srsfs/f /mnt/srsfs/lnf
 	test "$$(diff /mnt/srsfs/f /mnt/srsfs/lnf)" = ""
 	@echo '==== ln tests OK ===='
+	umount /mnt/srsfs
+	mount -t srsfs none /mnt/srsfs
+	cat /mnt/srsfs/f > /dev/null
+	@echo '==== remount tests OK ===='
 	umount /mnt/srsfs
 	rmmod srsfs

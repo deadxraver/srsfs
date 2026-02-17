@@ -169,19 +169,16 @@ static struct dentry* srsfs_lookup(
     LOG("srsfs_lookup: tried to find: %s", name);
     return NULL;
   }
-  struct inode* inode = NULL;  // ilookup(parent_inode->i_sb, resp.lcml.i_ino);
-  if (inode == NULL) {
-    inode = new_inode(parent_inode->i_sb);
-    inode_init_owner(
-        &nop_mnt_idmap, inode, parent_inode, (resp.lcml.is_dir ? S_IFDIR : S_IFREG) | S_IRWXUGO
-    );
-    inode->i_op = &srsfs_inode_ops;
-    if (resp.lcml.is_dir) {
-      inode->i_fop = &srsfs_dir_ops;
-      set_nlink(inode, 2);
-    } else
-      inode->i_fop = &srsfs_file_ops;
-  }
+  struct inode* inode = new_inode(parent_inode->i_sb);
+  inode_init_owner(
+      &nop_mnt_idmap, inode, parent_inode, (resp.lcml.is_dir ? S_IFDIR : S_IFREG) | S_IRWXUGO
+  );
+  inode->i_op = &srsfs_inode_ops;
+  if (resp.lcml.is_dir) {
+    inode->i_fop = &srsfs_dir_ops;
+    set_nlink(inode, 2);
+  } else
+    inode->i_fop = &srsfs_file_ops;
   inode->i_ino = resp.lcml.i_ino;
   inode->i_atime_sec = resp.lcml.i_atime_sec;
   inode->i_mtime_sec = resp.lcml.i_mtime_sec;

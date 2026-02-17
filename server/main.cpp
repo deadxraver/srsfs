@@ -310,8 +310,6 @@ int main(void) {
         resp.write.bytes_written =
             inode_map[i_ino].write(reqp.rw.buffer, reqp.rw.len, reqp.rw.offset);
         reqp.rw.buffer[resp.write.bytes_written] = 0;
-        std::cout << "written " << resp.write.bytes_written << " bytes: " << reqp.rw.buffer
-                  << std::endl;
         resp.code = 0;
         break;
       default:
