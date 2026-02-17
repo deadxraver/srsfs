@@ -243,7 +243,11 @@ int main(void) {
           resp.code = -ENOENT;
           break;
         }
-        if (!inode_map[f.i_ino].is_dir() || inode_map[f.i_ino].file_at(0).i_ino >= SRSFS_ROOT_ID) {
+        if (!inode_map[f.i_ino].is_dir()) {
+          resp.code = -ENOTDIR;
+          break;
+        }
+        if (inode_map[f.i_ino].file_at(0).i_ino >= SRSFS_ROOT_ID) {
           // has contents
           resp.code = -EPERM;
           break;
