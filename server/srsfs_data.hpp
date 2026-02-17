@@ -5,6 +5,8 @@
 #include <string>
 #include <vector>
 
+#define NET_DATA_SZ 1024
+
 // kernel space types & defines vvv
 typedef unsigned long ino_t;
 typedef long time64_t;
@@ -49,6 +51,7 @@ public:
   ino_t delete_file(const std::string& fname);
   void dec_refs();
   void inc_refs();
+  size_t write(char* data, size_t len, loff_t offset);
   bool is_valid() const;
   bool is_dir() const;
   size_t sz() const;

@@ -1,5 +1,6 @@
 #include "srsfs_data.hpp"
 
+#include <cstring>
 #include <ctime>
 
 std::string File::to_string() const {
@@ -108,6 +109,21 @@ void Inode::inc_refs() {
   if (!this->is_valid_ || this->is_dir_)
     return;
   ++(this->data_->refcount);
+}
+
+size_t Inode::write(char* data, size_t len, loff_t offset) {
+  shared_data* sd = this->data_;
+  len = std::min(len, (size_t)NET_DATA_SZ);
+  if (sd->sz < len + offset) {
+    char* newdata = new char[len + offset];
+    memcpy(newdata, sd->data, sd->sz);
+    sd->sz = len + offset;
+    delete[] sd->data;
+    sd->data = newdata;
+  }
+  memcpy(sd->data + offset, data, len);
+  this->sz_ = len + offset;
+  return len;
 }
 
 bool Inode::is_valid() const {

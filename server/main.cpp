@@ -288,13 +288,28 @@ int main(void) {
         break;
       case SRSFS_READ:
         std::cout << "read not implemented yet\n";
+        resp.pt = SRSFS_READ;
         resp.code = -EPERM;
         // TODO:
         break;
       case SRSFS_WRITE:
-        std::cout << "write not implemented yet\n";
-        resp.code = -ENOSPC;
-        // TODO:
+        resp.pt = SRSFS_WRITE;
+        i_ino = reqp.rw.target_ino;
+        target_inode = inode_map[i_ino];
+        if (!target_inode.is_valid()) {
+          resp.code = -ENOENT;
+          break;
+        }
+        if (target_inode.is_dir()) {
+          resp.code = -EISDIR;
+          break;
+        }
+        resp.write.bytes_written =
+            inode_map[i_ino].write(reqp.rw.buffer, reqp.rw.len, reqp.rw.offset);
+        reqp.rw.buffer[resp.write.bytes_written] = 0;
+        std::cout << "written " << resp.write.bytes_written << " bytes: " << reqp.rw.buffer
+                  << std::endl;
+        resp.code = 0;
         break;
       default:
         std::cout << "unknown method" << std::endl;

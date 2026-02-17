@@ -6,7 +6,6 @@
 
 #include "srsfs_data.hpp"
 
-#define NET_DATA_SZ 1024
 #define PORT 5955
 
 enum srsfs_package_type {
