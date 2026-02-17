@@ -8,6 +8,7 @@
 
 #define ADDR "127.0.0.1"
 
+#define SRSFS_ROOT_ID 1000
 #define PORT 5955
 #define NET_DATA_SZ 1024
 

@@ -1,19 +1,12 @@
 #include "srsfs.h"
 
-#include "list.h"
-#include "srsfs_dbg_logs.h"
-#include "srsfs_futil.h"
 #include "srsfs_net.h"
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("deadxraver");
 MODULE_DESCRIPTION("A simple FS kernel module");
 
-static struct srsfs_file rootdir;
-static int fcnt = 0;
 static struct inode* root_inode = NULL;
-
-#define ALLOC_ID() (SRSFS_ROOT_ID + fcnt++)
 
 static struct file_system_type srsfs_fs_type = {
     .name = "srsfs",
@@ -300,7 +293,6 @@ static int srsfs_fill_super(struct super_block* sb, void* data, int silent) {
     return -EAGAIN;
   } else
     LOG("server ping returned OK");
-  init_dir(&rootdir, "srsfs", SRSFS_ROOT_ID);
   root_inode = new_inode(sb);
   root_inode->i_ino = SRSFS_ROOT_ID;
   root_inode->i_size = PAGE_SIZE;

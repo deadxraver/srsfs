@@ -8,8 +8,6 @@
 #include <linux/module.h>
 #include <linux/uaccess.h>
 
-#include "srsfs_ds.h"
-
 #define LOG(fmt, ...) pr_info("[" MODULE_NAME "]: " fmt, ##__VA_ARGS__)
 
 #define MODULE_NAME "srsfs"
