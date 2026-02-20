@@ -18,3 +18,4 @@ modules.order
 compile_commands.json
 .cache/
 testtmp/
+build/
