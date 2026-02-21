@@ -5,10 +5,14 @@
 #include <iostream>
 #include <unordered_map>
 
-static int server_socket = -1;
-static File rootdir;
-static ino_t fcnt = SRSFS_ROOT_ID;
-static std::unordered_map<ino_t, Inode> inode_map;
+namespace {
+
+int server_socket = -1;
+File rootdir;
+ino_t fcnt = SRSFS_ROOT_ID;
+std::unordered_map<ino_t, Inode> inode_map;
+
+}
 
 #define ALLOC_INO() (fcnt++)
 
@@ -70,11 +74,12 @@ int main(void) {
     ino_t i_ino;
     int pos = 0;
     switch (reqp.pt) {
-      case SRSFS_PING:
+      case SRSFS_PING: {
         std::cout << "got ping from client" << std::endl;
         resp.pt = SRSFS_PING;
         resp.code = 0;
         break;
+      }
       case SRSFS_ITERATE:
         std::cout << "got iterate request from client" << std::endl;
         resp.pt = SRSFS_ITERATE;

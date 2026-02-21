@@ -6,8 +6,8 @@ PWD := $(CURDIR)
 KDIR = /lib/modules/`uname -r`/build
 EXTRA_CFLAGS = -Wall -g
 
-BLK_SZ=1025
-BLK_CNT=160
+BLK_SZ=1M
+BLK_CNT=1
 
 all:
 	make -C $(KDIR) M=$(PWD) modules
@@ -29,7 +29,7 @@ test: all
 	mount -t srsfs none /mnt/srsfs/
 	@echo '==== Testing for $(BLK_CNT) blocks of size $(BLK_SZ) each ===='
 	dd if=/dev/random count=$(BLK_CNT) bs=$(BLK_SZ) of=testtmp/f
-	dd if=testtmp/f count=$(BLK_CNT) bs=$(BLK_SZ) of=/mnt/srsfs/f
+	dd status='progress' if=testtmp/f count=$(BLK_CNT) bs=$(BLK_SZ) of=/mnt/srsfs/f
 	test "$$(diff testtmp/f /mnt/srsfs/f)" = ""
 	@echo '==== dd tests OK ===='
 	ln /mnt/srsfs/f /mnt/srsfs/lnf

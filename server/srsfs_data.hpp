@@ -5,15 +5,17 @@
 #include <string>
 #include <vector>
 
-#define NET_DATA_SZ 1024
+constexpr std::size_t NET_DATA_SZ = 1024;
 
 // kernel space types & defines vvv
-typedef unsigned long ino_t;
-typedef long time64_t;
-#define PAGE_SIZE 4096
-#define SRSFS_ROOT_ID 1000
+using ino_t = unsigned long;
+using time64_t = long;
+constexpr std::size_t PAGE_SIZE = 4096;
+// TODO: google style: kConstName
+constexpr ino_t SRSFS_ROOT_ID = 1000;
 //              ^^^
 
+// TODO: single code style vvv
 struct File {
   ino_t i_ino;
   std::string name;
@@ -21,9 +23,10 @@ struct File {
 };
 
 struct shared_data {
-  char* data;
+  char* data;  // TODO: -> vector
   size_t sz;
   int refcount;
+
   shared_data();
   ~shared_data();
   std::string to_string() const;
@@ -35,7 +38,7 @@ private:
   ino_t i_ino_;
   bool is_dir_;
   size_t sz_;
-  union {
+  union {  // TODO: std::variant / dynamic_cast instead
     shared_data* data_;
     std::vector<File>* dir_content_;
   };

@@ -63,15 +63,16 @@ Inode& Inode::operator=(const Inode& other) {
   } else {
     this->data_ = new shared_data();
     this->data_->sz = other.data_->sz;
-    if (this->data_->sz)
+    if (this->data_->sz)  // TODO: use cpp smart ptrs
       this->data_->data = new char[this->data_->sz];
   }
   return *this;
 }
 
 bool Inode::add_file(const File& f) {
-  if (!this->is_dir_)
+  if (!this->is_dir_) {
     return false;
+  }
   this->dir_content_->push_back(f);
   return true;
 }

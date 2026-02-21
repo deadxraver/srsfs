@@ -6,7 +6,7 @@
 
 #include "srsfs_data.hpp"
 
-#define PORT 5955
+constexpr int PORT = 5955;
 
 enum srsfs_package_type {
   SRSFS_PING = 0,
